@@ -57,4 +57,30 @@ router.put('/:id/slots/book', async (req, res) => {
   res.json({ msg: "Slot booked", doctor });
 });
 
+// GET /api/admin/doctors/:id/unbooked-slots
+router.get('/:id/unbooked-slots', async (req, res) => {
+  try {
+    const doctor = await Doctor.findById(req.params.id);
+    if (!doctor) return res.status(404).json({ msg: "Doctor not found" });
+    const unbookedSlots = (doctor.available_slots || []).filter(slot => !slot.isBooked);
+    res.json(unbookedSlots);
+  } catch (err) {
+    res.status(500).json({ msg: err.message });
+  }
+});
+
+// GET all doctors
+router.get('/', async (req, res) => {
+  const docs = await Doctor.find({}).populate('specialty');
+  // For each doctor, only include unbooked slots
+  const docsWithUnbookedSlots = docs.map(doc => {
+    const d = doc.toObject();
+    d.available_slots = (d.available_slots || []).filter(slot => !slot.isBooked);
+    return d;
+  });
+  res.json(docsWithUnbookedSlots);
+});
+
+
+
 module.exports = router;

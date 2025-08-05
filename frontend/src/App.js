@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import Login from "./login";
 import Register from "./Register";
-import SymptomForm from "./SymptomForm"; // <-- Import the new form
+import SymptomForm from "./SymptomForm";
+import AdminDoctorPage from "./AdminDoctorPage";
 
 function App() {
   const [page, setPage] = useState("login");
@@ -13,8 +14,20 @@ function App() {
     setPage("symptom");
   };
 
+  // Optionally, you can add a logout function
+  const handleLogout = () => {
+    setUser(null);
+    setPage("login");
+  };
+
   return (
     <div>
+      {/* Add a persistent Admin button for testing/demo */}
+      <div style={{ textAlign: "right", padding: "12px" }}>
+        <button onClick={() => setPage("admin")}>Admin: Doctors</button>
+        {user && <button style={{ marginLeft: 8 }} onClick={handleLogout}>Logout</button>}
+      </div>
+      
       {page === "login" && (
         <>
           <Login onLoginSuccess={handleLoginSuccess} />
@@ -37,6 +50,10 @@ function App() {
 
       {page === "symptom" && (
         <SymptomForm user={user} />
+      )}
+
+      {page === "admin" && (
+        <AdminDoctorPage />
       )}
     </div>
   );
