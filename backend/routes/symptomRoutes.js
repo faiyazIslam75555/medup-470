@@ -70,6 +70,7 @@ router.post('/search', async (req, res) => {
   const doctors = await Doctor.find({ specialty: { $in: specialtyIds } }).populate('specialty', 'name');
 
   const recommended_doctors = doctors.map(d => ({
+    _id: d._id,
     name: d.name,
     specialty: d.specialty.name
   }));

@@ -1,7 +1,10 @@
 import React, { useState } from "react";
 import axios from "axios";
+import BookingPage from "./BookingPage";
 
 export default function SymptomForm({ user }) {
+  const [currentPage, setCurrentPage] = useState('search'); // 'search' or 'booking'
+  const [selectedDoctorId, setSelectedDoctorId] = useState(null);
   const [input, setInput] = useState("");
   const [symptoms, setSymptoms] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
@@ -70,6 +73,28 @@ export default function SymptomForm({ user }) {
     }
     setLoading(false);
   };
+
+  // Handle booking appointment
+  const handleBookAppointment = (doctorId) => {
+    setSelectedDoctorId(doctorId);
+    setCurrentPage('booking');
+  };
+
+  // Handle going back to search
+  const handleBackToSearch = () => {
+    setCurrentPage('search');
+    setSelectedDoctorId(null);
+  };
+
+  // If we're on booking page, show BookingPage component
+  if (currentPage === 'booking') {
+    return (
+      <BookingPage 
+        doctorId={selectedDoctorId} 
+        onBack={handleBackToSearch}
+      />
+    );
+  }
 
   return (
     <div
@@ -222,6 +247,7 @@ export default function SymptomForm({ user }) {
                           background: "#2dce89", color: "#fff", fontWeight: 700, border: "none",
                           padding: "7px 20px", borderRadius: 12, cursor: "pointer", fontSize: 15
                         }}
+                        onClick={() => handleBookAppointment(doc._id || `doctor_${idx}`)}
                       >
                         Book Appointment
                       </button>

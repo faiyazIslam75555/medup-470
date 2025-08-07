@@ -2,13 +2,19 @@ const express = require('express');
 const router = express.Router();
 const Doctor = require('../models/Doctor');
 
-// List all doctors
+// GET all doctors (only unbooked slots included)
 router.get('/', async (req, res) => {
-  const doctors = await Doctor.find({}).populate('specialty');
-  res.json(doctors);
+  const docs = await Doctor.find({}).populate('specialty');
+  // For each doctor, only include unbooked slots
+  const docsWithUnbookedSlots = docs.map(doc => {
+    const d = doc.toObject();
+    d.available_slots = (d.available_slots || []).filter(slot => !slot.isBooked);
+    return d;
+  });
+  res.json(docsWithUnbookedSlots);
 });
 
-// Approve/add doctor
+// Add/Approve a doctor
 router.post('/', async (req, res) => {
   try {
     const { name, specialtyId, experience_years, department, available_slots } = req.body;
@@ -27,10 +33,48 @@ router.post('/', async (req, res) => {
 });
 
 // Assign department
-router.put('/:id/department', async (req, res) => {
-  const { department } = req.body;
-  const doctor = await Doctor.findByIdAndUpdate(req.params.id, { department }, { new: true });
-  res.json(doctor);
+router.put('/:id/slots', async (req, res) => {
+  const { available_slots } = req.body;
+
+  // Check for duplicate slots in request
+  const uniqueSlots = [];
+  const slotSet = new Set();
+  let duplicateFound = false;
+
+  for (const slot of available_slots) {
+    const key = `${slot.day}_${slot.start}_${slot.end}`;
+    if (slotSet.has(key)) {
+      duplicateFound = true;
+      continue; // skip duplicates
+    }
+    slotSet.add(key);
+    uniqueSlots.push(slot);
+  }
+
+  // Check if any requested slot is already booked for this doctor in DB
+  const doctor = await Doctor.findById(req.params.id);
+  const alreadyBooked = [];
+  for (const slot of uniqueSlots) {
+    const match = (doctor.available_slots || []).find(
+      s => s.day === slot.day && s.start === slot.start && s.end === slot.end && s.isBooked
+    );
+    if (match) alreadyBooked.push(`${slot.day} ${slot.start}-${slot.end}`);
+  }
+
+  if (alreadyBooked.length > 0) {
+    return res.status(400).json({
+      msg: `Cannot assign slots: already booked: ${alreadyBooked.join(', ')}`
+    });
+  }
+
+  if (duplicateFound) {
+    return res.status(400).json({ msg: "Duplicate slots in request. Only unique slots are allowed." });
+  }
+
+  // Assign only unique and not already booked slots
+  doctor.available_slots = uniqueSlots;
+  await doctor.save();
+  res.json({ msg: "Slots assigned", available_slots: doctor.available_slots });
 });
 
 // Assign/overwrite slots
@@ -68,19 +112,5 @@ router.get('/:id/unbooked-slots', async (req, res) => {
     res.status(500).json({ msg: err.message });
   }
 });
-
-// GET all doctors
-router.get('/', async (req, res) => {
-  const docs = await Doctor.find({}).populate('specialty');
-  // For each doctor, only include unbooked slots
-  const docsWithUnbookedSlots = docs.map(doc => {
-    const d = doc.toObject();
-    d.available_slots = (d.available_slots || []).filter(slot => !slot.isBooked);
-    return d;
-  });
-  res.json(docsWithUnbookedSlots);
-});
-
-
 
 module.exports = router;

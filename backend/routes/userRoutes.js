@@ -39,6 +39,16 @@ router.post('/register', async (req, res) => {
   }
 });
 
+// GET all users (for admin/testing only)
+router.get('/', async (req, res) => {
+  try {
+    const users = await User.find({});
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ msg: 'Error fetching users', error: err.message });
+  }
+});
+
 // LOGIN Route
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;

@@ -2,7 +2,8 @@ import React, { useState } from "react";
 import Login from "./login";
 import Register from "./Register";
 import SymptomForm from "./SymptomForm";
-import AdminDoctorPage from "./AdminDoctorPage";
+import DoctorPage from "./DoctorPage";
+import AdminPage from "./AdminPage";
 
 function App() {
   const [page, setPage] = useState("login");
@@ -25,6 +26,7 @@ function App() {
       {/* Add a persistent Admin button for testing/demo */}
       <div style={{ textAlign: "right", padding: "12px" }}>
         <button onClick={() => setPage("admin")}>Admin: Doctors</button>
+        <button onClick={() => setPage("doctor")} style={{ marginLeft: 8 }}>Doctor Dashboard</button>
         {user && <button style={{ marginLeft: 8 }} onClick={handleLogout}>Logout</button>}
       </div>
       
@@ -53,7 +55,11 @@ function App() {
       )}
 
       {page === "admin" && (
-        <AdminDoctorPage />
+        <AdminPage />
+      )}
+
+      {page === "doctor" && (
+        <DoctorPage />
       )}
     </div>
   );

@@ -3,21 +3,38 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 
 // --- SETUP EXPRESS APP ---
-const app = express();            // <-- Define app FIRST
+const app = express();           
 
 app.use(cors());
 app.use(express.json());
 
-// -- admin---
+// -- ADMIN ROUTES ---
+const adminRoutes = require('./routes/adminRoutes');
+app.use('/api/admin', adminRoutes);
+
+// -- DOCTOR ADMIN ROUTES ---
 const doctorAdminRoutes = require('./routes/doctorAdminRoutes');
 app.use('/api/admin/doctors', doctorAdminRoutes);
 
 // --- ROUTES ---
 const symptomRoutes = require('./routes/symptomRoutes');
-app.use('/api/symptoms', symptomRoutes);  // <-- Use AFTER app is defined
+app.use('/api/symptoms', symptomRoutes); 
 
 const userRoutes = require('./routes/userRoutes');
 app.use('/api/users', userRoutes);
+
+// --- DOCTOR ROUTES ---
+const doctorRoutes = require('./routes/doctorRoutes');
+app.use('/api/doctors', doctorRoutes);
+
+// --- APPOINTMENT ROUTES ---
+const appointmentRoutes = require('./routes/appointmentRoutes');
+app.use('/api/appointments', appointmentRoutes);
+
+// --- SCHEDULE ROUTES ---
+const scheduleRoutes = require('./routes/scheduleRoutes');
+app.use('/api/admin', scheduleRoutes);
+
 
 // --- CONNECT TO MONGODB ATLAS ---
 mongoose.connect(
