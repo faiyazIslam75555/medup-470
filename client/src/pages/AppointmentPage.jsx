@@ -20,6 +20,8 @@ const AppointmentPage = () => {
     reason: '',
     urgency: 'normal'
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
 
   useEffect(() => {
     // Get doctor info from location state
@@ -66,17 +68,23 @@ const AppointmentPage = () => {
     const nextDate = new Date(today);
     nextDate.setDate(today.getDate() + daysToAdd);
     
-    // Debug logging
-    console.log('Date calculation:', {
-      today: today.toDateString(),
-      currentDay: currentDay,
-      selectedDay: dayOfWeek,
-      daysToAdd: daysToAdd,
-      calculatedDate: nextDate.toDateString(),
-      calculatedDay: nextDate.getDay()
-    });
+    // Verify the calculated date matches the selected day of week
+    const calculatedDay = nextDate.getDay();
+    if (calculatedDay !== dayOfWeek) {
+      console.error('❌ Date calculation mismatch:', {
+        selectedDay: dayOfWeek,
+        calculatedDay: calculatedDay,
+        daysToAdd: daysToAdd,
+        today: today.toDateString(),
+        nextDate: nextDate.toDateString()
+      });
+    }
     
-    return nextDate.toISOString().split('T')[0];
+    // Use local date to avoid timezone issues
+    const year = nextDate.getFullYear();
+    const month = String(nextDate.getMonth() + 1).padStart(2, '0');
+    const day = String(nextDate.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   };
 
   // Handle time slot selection
@@ -100,6 +108,23 @@ const AppointmentPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
+    if (isSubmitting) return; // Prevent multiple submissions
+    
+    setIsSubmitting(true);
+    
+    // Log the request payload
+    const requestPayload = {
+      doctorId: formData.doctorId,
+      reason: formData.reason,
+      urgency: formData.urgency,
+      dayOfWeek: formData.dayOfWeek,
+      timeSlot: formData.timeSlot,
+      date: formData.date
+    };
+    
+    console.log('🚀 API Request:');
+    console.log(JSON.stringify(requestPayload, null, 2));
+    
     try {
       const token = localStorage.getItem('userToken');
       const response = await fetch('http://localhost:5000/api/appointments', {
@@ -108,19 +133,15 @@ const AppointmentPage = () => {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          doctorId: formData.doctorId,
-          reason: formData.reason,
-          urgency: formData.urgency,
-          dayOfWeek: formData.dayOfWeek,
-          timeSlot: formData.timeSlot,
-          date: formData.date
-        })
+        body: JSON.stringify(requestPayload)
       });
 
       if (response.ok) {
-        alert('Appointment booked successfully!');
-        navigate('/patient/dashboard');
+        setSuccessMessage('Appointment booked successfully! Redirecting...');
+        // Add a delay to show the success message before navigation
+        setTimeout(() => {
+          navigate('/patient-dashboard');
+        }, 2000);
       } else {
         const errorData = await response.json();
         alert(errorData.message || 'Failed to book appointment');
@@ -128,6 +149,9 @@ const AppointmentPage = () => {
     } catch (error) {
       console.error('Error booking appointment:', error);
       alert('Failed to book appointment. Please try again.');
+      // Don't navigate away, stay on the current page
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -176,6 +200,21 @@ const AppointmentPage = () => {
             </div>
           )}
 
+          {/* Success Message */}
+          {successMessage && (
+            <div style={{
+              padding: '15px',
+              backgroundColor: '#d4edda',
+              color: '#155724',
+              borderRadius: '4px',
+              marginBottom: '20px',
+              textAlign: 'center',
+              fontWeight: '500'
+            }}>
+              {successMessage}
+            </div>
+          )}
+
           <form onSubmit={handleSubmit}>
             {/* Time Slot Selection */}
             <div style={{ marginBottom: '20px' }}>
@@ -205,7 +244,7 @@ const AppointmentPage = () => {
                            textAlign: 'center'
                          }}
                        >
-                                                 <div style={{ fontWeight: 'bold', marginBottom: '5px' }}>{dayName}</div>
+                        <div style={{ fontWeight: 'bold', marginBottom: '5px' }}>{dayName}</div>
                         <div style={{ fontSize: '14px', color: '#666' }}>
                           {slot.timeSlot === '8-12' ? '8:00 AM - 12:00 PM' :
                            slot.timeSlot === '12-4' ? '12:00 PM - 4:00 PM' :
@@ -216,11 +255,14 @@ const AppointmentPage = () => {
                           <>
                             <div style={{ color: '#007bff', fontSize: '12px', marginTop: '5px' }}>✓ Selected</div>
                             <div style={{ color: '#666', fontSize: '11px', marginTop: '2px' }}>
-                              {new Date(formData.date).toLocaleDateString('en-US', { 
-                                weekday: 'short', 
-                                month: 'short', 
-                                day: 'numeric' 
-                              })}
+                              {(() => {
+                                const calculatedDate = getNextOccurrence(slot.dayOfWeek);
+                                return new Date(calculatedDate).toLocaleDateString('en-US', { 
+                                  weekday: 'short', 
+                                  month: 'short', 
+                                  day: 'numeric' 
+                                });
+                              })()}
                             </div>
                           </>
                         )}
@@ -242,7 +284,7 @@ const AppointmentPage = () => {
             </div>
 
             {/* Selected Date Display */}
-                      {formData.date && (
+            {formData.dayOfWeek !== null && (
             <div style={{ marginBottom: '20px' }}>
               <label style={{ display: 'block', marginBottom: '5px', color: '#555', fontWeight: '500' }}>
                 Appointment Date:
@@ -254,12 +296,15 @@ const AppointmentPage = () => {
                 backgroundColor: '#f8f9fa',
                 color: '#333'
               }}>
-                {new Date(formData.date).toLocaleDateString('en-US', { 
-                  weekday: 'long', 
-                  year: 'numeric', 
-                  month: 'long', 
-                  day: 'numeric' 
-                })}
+                {(() => {
+                  const calculatedDate = getNextOccurrence(formData.dayOfWeek);
+                  return new Date(calculatedDate).toLocaleDateString('en-US', { 
+                    weekday: 'long', 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
+                  });
+                })()}
               </div>
             </div>
           )}
@@ -327,18 +372,19 @@ const AppointmentPage = () => {
               </button>
               <button
                 type="submit"
+                disabled={isSubmitting}
                 style={{
                   flex: 1,
                   padding: '12px',
-                  backgroundColor: '#007bff',
+                  backgroundColor: isSubmitting ? '#6c757d' : '#007bff',
                   color: 'white',
                   border: 'none',
                   borderRadius: '4px',
                   fontSize: '16px',
-                  cursor: 'pointer'
+                  cursor: isSubmitting ? 'not-allowed' : 'pointer'
                 }}
               >
-                Book Appointment
+                {isSubmitting ? 'Booking...' : 'Book Appointment'}
               </button>
             </div>
           </form>
