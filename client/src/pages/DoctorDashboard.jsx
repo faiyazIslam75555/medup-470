@@ -17,7 +17,7 @@ const DoctorDashboard = () => {
   });
 
   const [loading, setLoading] = useState(true);
-  const [activeTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState('overview');
   
   // Form states
   const [showSlotRequestForm, setShowSlotRequestForm] = useState(false);
@@ -513,7 +513,7 @@ const DoctorDashboard = () => {
         );
       
       default:
-      return null;
+        return null;
     }
   };
 
@@ -550,20 +550,20 @@ const DoctorDashboard = () => {
           marginBottom: '30px'
         }}>
           <h1 style={{ color: '#333', margin: 0 }}>👨‍⚕️ Doctor Dashboard - mediCore</h1>
-        <button 
-          onClick={handleLogout} 
-          style={{ 
+          <button 
+            onClick={handleLogout} 
+            style={{ 
               padding: '10px 20px',
-            backgroundColor: '#dc3545', 
-            color: 'white', 
-            border: 'none', 
+              backgroundColor: '#dc3545', 
+              color: 'white', 
+              border: 'none', 
               borderRadius: '5px',
               cursor: 'pointer'
-          }}
-        >
-          Logout
-        </button>
-      </div>
+            }}
+          >
+            Logout
+          </button>
+        </div>
 
         {/* Tab Navigation */}
         <div style={{ 
@@ -807,7 +807,7 @@ const DoctorDashboard = () => {
                 <label style={{ display: 'block', marginBottom: '5px', color: '#555' }}>
                   Leave Type:
                 </label>
-            <select
+                <select
                   value={leaveRequestData.leaveType}
                   onChange={(e) => setLeaveRequestData({...leaveRequestData, leaveType: e.target.value})}
                   required
@@ -828,16 +828,16 @@ const DoctorDashboard = () => {
                   <option value="bereavement_leave">Bereavement Leave</option>
                   <option value="other">Other</option>
                 </select>
-          </div>
+              </div>
               <div style={{ marginBottom: '20px' }}>
                 <label style={{ display: 'block', marginBottom: '5px', color: '#555' }}>
                   Start Date:
                 </label>
-            <input
-              type="date"
+                <input
+                  type="date"
                   value={leaveRequestData.startDate}
                   onChange={(e) => setLeaveRequestData({...leaveRequestData, startDate: e.target.value})}
-              required
+                  required
                   style={{
                     width: '100%',
                     padding: '12px',
@@ -845,17 +845,17 @@ const DoctorDashboard = () => {
                     borderRadius: '5px',
                     fontSize: '16px'
                   }}
-            />
-          </div>
+                />
+              </div>
               <div style={{ marginBottom: '20px' }}>
                 <label style={{ display: 'block', marginBottom: '5px', color: '#555' }}>
                   End Date:
                 </label>
-            <input
-              type="date"
+                <input
+                  type="date"
                   value={leaveRequestData.endDate}
                   onChange={(e) => setLeaveRequestData({...leaveRequestData, endDate: e.target.value})}
-              required
+                  required
                   style={{
                     width: '100%',
                     padding: '12px',
@@ -863,17 +863,17 @@ const DoctorDashboard = () => {
                     borderRadius: '5px',
                     fontSize: '16px'
                   }}
-            />
-          </div>
+                />
+              </div>
               <div style={{ marginBottom: '20px' }}>
                 <label style={{ display: 'block', marginBottom: '5px', color: '#555' }}>
                   Reason:
                 </label>
-            <textarea
+                <textarea
                   value={leaveRequestData.reason}
                   onChange={(e) => setLeaveRequestData({...leaveRequestData, reason: e.target.value})}
-              required
-              rows="3"
+                  required
+                  rows="3"
                   style={{
                     width: '100%',
                     padding: '12px',
@@ -882,19 +882,19 @@ const DoctorDashboard = () => {
                     fontSize: '16px',
                     resize: 'vertical'
                   }}
-            />
-          </div>
+                />
+              </div>
               <div style={{ marginBottom: '20px' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <input
-                type="checkbox"
+                  <input
+                    type="checkbox"
                     checked={leaveRequestData.isEmergency}
                     onChange={(e) => setLeaveRequestData({...leaveRequestData, isEmergency: e.target.checked})}
                     style={{ transform: 'scale(1.2)' }}
-              />
+                  />
                   <span style={{ color: '#555' }}>Emergency Leave</span>
-            </label>
-          </div>
+                </label>
+              </div>
               <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
                 <button
                   type="button"
@@ -921,16 +921,16 @@ const DoctorDashboard = () => {
                     cursor: 'pointer'
                   }}
                 >
-            Submit Request
-          </button>
+                  Submit Request
+                </button>
               </div>
             </form>
-              </div>
-            </div>
-        )}
+          </div>
+        </div>
+      )}
     </div>
   );
-}
+};
 
 export default DoctorDashboard;
 
