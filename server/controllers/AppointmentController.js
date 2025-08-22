@@ -5,7 +5,6 @@ import Appointment from '../models/Appointment.js';
 import TimeSlot from '../models/TimeSlot.js';
 import User from '../models/User.js';
 import Doctor from '../models/Doctor.js';
-import LeaveRequest from '../models/LeaveRequest.js';
 
 /* =================== APPOINTMENT BOOKING ====================== */
 
@@ -285,55 +284,7 @@ export const cancelAppointment = async (req, res) => {
   }
 };
 
-// GET /api/appointments/doctor/:doctorId/available-days - Get available days for a doctor
-export const getAvailableDays = async (req, res) => {
-  try {
-    const { doctorId } = req.params;
 
-    // Check if doctor exists
-    const doctor = await Doctor.findById(doctorId);
-    if (!doctor) {
-      return res.status(404).json({ message: 'Doctor not found' });
-    }
-
-    // This endpoint is deprecated - use DoctorSchedule API instead
-    res.status(410).json({ 
-      message: 'This endpoint is deprecated. Use /api/doctor/schedule/available instead.',
-      alternativeEndpoint: '/api/doctor/schedule/available'
-    });
-  } catch (error) {
-    console.error('Get available days error:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-};
-
-// GET /api/appointments/doctor/:doctorId/available-slots - Get available time slots for a doctor
-export const getAvailableSlots = async (req, res) => {
-  try {
-    const { doctorId } = req.params;
-    const { date } = req.query;
-
-    // Validation
-    if (!date) {
-      return res.status(400).json({ message: 'Date is required' });
-    }
-
-    // Check if doctor exists
-    const doctor = await Doctor.findById(doctorId);
-    if (!doctor) {
-      return res.status(404).json({ message: 'Doctor not found' });
-    }
-
-    // This endpoint is deprecated - use DoctorSchedule API instead
-    res.status(410).json({ 
-      message: 'This endpoint is deprecated. Use /api/doctor/schedule instead.',
-      alternativeEndpoint: '/api/doctor/schedule'
-    });
-  } catch (error) {
-    console.error('Get available slots error:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-};
 
 export default {
   createAppointment,

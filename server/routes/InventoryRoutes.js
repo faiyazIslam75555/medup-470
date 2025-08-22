@@ -13,7 +13,6 @@ import {
   searchMedications,
   getMedicationById
 } from '../controllers/InventoryController.js';
-//import adminAuth from '../middleware/adminAuthMiddleware.js'; // You must create this middleware
 
 const router = express.Router();
 const upload = multer(); // memory storage (buffer), as CSVs are usually small

@@ -1,6 +1,5 @@
 import TimeSlot from '../models/TimeSlot.js';
 import Doctor from '../models/Doctor.js';
-import User from '../models/User.js';
 
 // GET /api/time-slots - Get all time slots (admin view)
 export const getAllTimeSlots = async (req, res) => {

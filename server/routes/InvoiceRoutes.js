@@ -4,7 +4,6 @@ import {
   getInvoiceById, 
   updateInvoiceStatus 
 } from '../controllers/InvoiceController.js';
-//import adminAuth from '../middleware/adminAuthMiddleware.js';
 
 const router = express.Router();
 

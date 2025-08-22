@@ -9,7 +9,6 @@ import {
   updatePrescription,
   cancelPrescription
 } from '../controllers/PrescriptionController.js';
-//import adminAuth from '../middleware/adminAuthMiddleware.js';
 
 const router = express.Router();
 

@@ -164,7 +164,6 @@ export const rejectSchedule = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Reject schedule error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
@@ -177,7 +176,6 @@ export const getPendingSchedulesCount = async (req, res) => {
     res.json({ pendingCount: count });
 
   } catch (error) {
-    console.error('Get pending count error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
@@ -201,7 +199,6 @@ export const getScheduleOverview = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Get schedule overview error:', error);
     res.status(500).json({ message: 'Server error', details: error.message });
   }
 };
