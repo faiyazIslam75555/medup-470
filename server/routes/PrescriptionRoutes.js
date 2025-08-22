@@ -5,6 +5,7 @@ import {
   getAllPatients, 
   getAllDoctors,
   getPrescriptionById,
+  getPrescriptionsByPatient,
   updatePrescription,
   cancelPrescription
 } from '../controllers/PrescriptionController.js';
@@ -17,6 +18,7 @@ router.get('/', getAllPrescriptions);
 router.get('/patients', getAllPatients);
 router.get('/doctors', getAllDoctors);
 router.get('/:id', getPrescriptionById);
+router.get('/patient/:patientId', getPrescriptionsByPatient);
 router.put('/:id', updatePrescription);
 router.delete('/:id', cancelPrescription);
 

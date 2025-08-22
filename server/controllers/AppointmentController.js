@@ -139,6 +139,23 @@ export const getPatientAppointments = async (req, res) => {
   }
 };
 
+// GET /api/appointments/patient/:patientId - Get appointments by patient ID (for doctors)
+export const getPatientAppointmentsById = async (req, res) => {
+  try {
+    const { patientId } = req.params;
+    
+    const appointments = await Appointment.find({ user: patientId })
+      .populate('doctor', 'specialty')
+      .populate('user', 'name email phoneNumber')
+      .sort({ date: 1, timeSlot: 1 });
+
+    res.json({ appointments });
+  } catch (error) {
+    console.error('Get patient appointments by ID error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 // GET /api/appointments/doctor/me - Get doctor's appointments
 export const getDoctorAppointments = async (req, res) => {
   try {
@@ -321,6 +338,7 @@ export const getAvailableSlots = async (req, res) => {
 export default {
   createAppointment,
   getPatientAppointments,
+  getPatientAppointmentsById,
   getDoctorAppointments,
   getAppointmentById,
   updateAppointment,

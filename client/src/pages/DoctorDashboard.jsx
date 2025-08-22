@@ -4,12 +4,14 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API_BASE_URL } from '../utils/api';
+import PatientEMR from '../components/PatientEMR';
 
 const DoctorDashboard = () => {
   const [patients, setPatients] = useState([]);
   const [appointments, setAppointments] = useState([]);
   const [leaveRequests, setLeaveRequests] = useState([]);
   const [timeSlots, setTimeSlots] = useState([]);
+
   const [slotRequestData, setSlotRequestData] = useState({
     dayOfWeek: [],
     timeSlot: '',
@@ -22,6 +24,8 @@ const DoctorDashboard = () => {
   // Form states
   const [showSlotRequestForm, setShowSlotRequestForm] = useState(false);
   const [showLeaveRequestForm, setShowLeaveRequestForm] = useState(false);
+  const [showPatientEMR, setShowPatientEMR] = useState(false);
+  const [selectedPatient, setSelectedPatient] = useState(null);
   const [leaveRequestData, setLeaveRequestData] = useState({
     leaveType: 'vacation',
     startDate: '',
@@ -80,6 +84,8 @@ const DoctorDashboard = () => {
         const appointmentsData = await appointmentsRes.json();
         setAppointments(appointmentsData.appointments || []);
       }
+
+
     } catch (err) {
       console.error('Error fetching data:', err);
     } finally {
@@ -223,6 +229,16 @@ const DoctorDashboard = () => {
     }
   };
 
+  // Patient EMR Functions
+  const viewPatientEMR = (patient) => {
+    setSelectedPatient(patient);
+    setShowPatientEMR(true);
+  };
+
+  const handlePrescriptionCreated = () => {
+    fetchData(); // Refresh data when prescription is created
+  };
+
   const renderTabContent = () => {
     switch (activeTab) {
       case 'overview':
@@ -245,6 +261,7 @@ const DoctorDashboard = () => {
                 <h3 style={{ margin: '0 0 10px 0', color: '#856404' }}>📋 Appointments</h3>
                 <p style={{ fontSize: '24px', fontWeight: 'bold', margin: '0', color: '#856404' }}>{appointments.length}</p>
               </div>
+
             </div>
 
             {/* Quick Actions */}
@@ -282,6 +299,7 @@ const DoctorDashboard = () => {
               >
                 📅 Request Leave
               </button>
+
             </div>
           </div>
         );
@@ -290,21 +308,44 @@ const DoctorDashboard = () => {
         return (
           <div>
             <h2 style={{ color: '#007bff', marginBottom: '20px' }}>👥 My Patients</h2>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' }}>
-              {patients.map((patient, index) => (
-                <div key={index} style={{
-                  border: '1px solid #ddd',
-                  borderRadius: '8px',
-                  padding: '20px',
-                  backgroundColor: '#f8f9fa'
-                }}>
-                  <h3 style={{ margin: '0 0 10px 0', color: '#333' }}>{patient.user?.name || 'Unknown Patient'}</h3>
-                  <p style={{ margin: '5px 0', color: '#666' }}><strong>Email:</strong> {patient.user?.email || 'N/A'}</p>
-                  <p style={{ margin: '5px 0', color: '#666' }}><strong>Phone:</strong> {patient.user?.phoneNumber || 'N/A'}</p>
-                  <p style={{ margin: '5px 0', color: '#666' }}><strong>Status:</strong> {patient.status}</p>
-                </div>
-              ))}
-            </div>
+            {patients.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
+                <p>No patients assigned yet.</p>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' }}>
+                {patients.map((patient, index) => (
+                  <div key={index} style={{
+                    border: '1px solid #ddd',
+                    borderRadius: '8px',
+                    padding: '20px',
+                    backgroundColor: '#f8f9fa',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => e.target.style.transform = 'translateY(-2px)'}
+                  onMouseLeave={(e) => e.target.style.transform = 'translateY(0)'}
+                  onClick={() => viewPatientEMR(patient)}
+                  >
+                    <h3 style={{ margin: '0 0 10px 0', color: '#333' }}>{patient.user?.name || 'Unknown Patient'}</h3>
+                    <p style={{ margin: '5px 0', color: '#666' }}><strong>Email:</strong> {patient.user?.email || 'N/A'}</p>
+                    <p style={{ margin: '5px 0', color: '#666' }}><strong>Phone:</strong> {patient.user?.phoneNumber || 'N/A'}</p>
+                    <p style={{ margin: '5px 0', color: '#666' }}><strong>Status:</strong> {patient.status}</p>
+                    <div style={{ 
+                      marginTop: '15px', 
+                      padding: '8px 16px', 
+                      backgroundColor: '#007bff', 
+                      color: 'white', 
+                      borderRadius: '5px',
+                      textAlign: 'center',
+                      fontSize: '14px'
+                    }}>
+                      👁️ Click to View EMR & Write Prescription
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         );
 
@@ -512,6 +553,8 @@ const DoctorDashboard = () => {
           </div>
         );
       
+
+      
       default:
         return null;
     }
@@ -638,6 +681,7 @@ const DoctorDashboard = () => {
           >
             📅 Requests
           </button>
+
         </div>
 
         {/* Tab Content */}
@@ -927,6 +971,18 @@ const DoctorDashboard = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Patient EMR Modal */}
+      {showPatientEMR && selectedPatient && (
+        <PatientEMR
+          patient={selectedPatient}
+          onClose={() => {
+            setShowPatientEMR(false);
+            setSelectedPatient(null);
+          }}
+          onPrescriptionCreated={handlePrescriptionCreated}
+        />
       )}
     </div>
   );

@@ -7,6 +7,7 @@ import {
   createAppointment,
   getPatientAppointments,
   getDoctorAppointments,
+  getPatientAppointmentsById,
   getAppointmentById,
   updateAppointment,
   cancelAppointment
@@ -20,6 +21,7 @@ router.use(protect);
 // Patient routes
 router.post('/', createAppointment);                           // POST /api/appointments
 router.get('/', getPatientAppointments);                       // GET /api/appointments
+router.get('/patient/:patientId', getPatientAppointmentsById); // GET /api/appointments/patient/:patientId
 router.get('/:id', getAppointmentById);                        // GET /api/appointments/:id
 router.put('/:id', updateAppointment);                         // PUT /api/appointments/:id
 router.delete('/:id', cancelAppointment);                      // DELETE /api/appointments/:id

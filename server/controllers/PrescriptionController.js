@@ -99,6 +99,23 @@ export const getAllPrescriptions = async (req, res) => {
   }
 };
 
+// Get prescriptions by patient ID
+export const getPrescriptionsByPatient = async (req, res) => {
+  try {
+    const { patientId } = req.params;
+    
+    const prescriptions = await Prescription.find({ patient: patientId })
+      .populate('patient', 'name email phoneNumber')
+      .populate('doctor', 'name email')
+      .populate('prescribedMedicines.medicineId', 'name price quantity')
+      .sort({ createdAt: -1 });
+    
+    res.json({ prescriptions });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
 // Get prescriptions by doctor
 export const getMyPrescriptions = async (req, res) => {
   try {
