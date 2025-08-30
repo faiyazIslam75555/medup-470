@@ -1,0 +1,32 @@
+{
+  "name": "mediCore",
+  "version": "1.0.0",
+  "description": "Comprehensive hospital management system",
+  "main": "server/server.js",
+  "scripts": {
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "cd server && npm run dev",
+    "client": "cd client && npm run dev",
+    "build": "cd client && npm run build",
+    "install-all": "npm install && cd server && npm install && cd client && npm install"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Shoumik-Mujtaheed/CSE471-Proj.git"
+  },
+  "keywords": ["hospital", "management", "healthcare", "mediCore"],
+  "author": "mediCore Team",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Shoumik-Mujtaheed/CSE471-Proj/issues"
+  },
+  "homepage": "https://github.com/Shoumik-Mujtaheed/CSE471-Proj#readme",
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
