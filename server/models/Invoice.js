@@ -39,13 +39,19 @@ const invoiceSchema = new mongoose.Schema(
         availableQuantity: { type: Number, default: 0 }
       }
     ],
-    // ADDED: Subtotal, tax, and better breakdown
+    // ADDED: Subtotal, tax, hospital fee, and better breakdown
     subtotal: {
       type: Number,
       required: true,
       min: 0,
     },
     tax: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    // NEW: Hospital/Admin fee (10% of subtotal)
+    hospitalFee: {
       type: Number,
       default: 0,
       min: 0,
@@ -73,6 +79,20 @@ const invoiceSchema = new mongoose.Schema(
     // ADDED: Payment tracking
     paidDate: {
       type: Date,
+    },
+    // NEW: Payment processing fields
+    paymentMethod: {
+      type: String,
+      enum: ['credit_card', 'debit_card', 'bank_transfer', 'cash', 'check', 'online'],
+    },
+    paymentId: {
+      type: String,
+      unique: true,
+      sparse: true, // Allow null values but ensure uniqueness when present
+    },
+    paidAmount: {
+      type: Number,
+      min: 0,
     },
     notes: {
       type: String,

@@ -133,14 +133,16 @@ export const loginUser = async (req, res) => {
       }
 
       res.json({
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        bloodGroup: user.bloodGroup,
+        user: {
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          bloodGroup: user.bloodGroup,
+          ...profileInfo
+        },
         token: generateToken(user._id),
-        nextPath: getNextPath(user.role),
-        ...profileInfo
+        nextPath: getNextPath(user.role)
       });
     } else {
       res.status(401).json({ message: 'Invalid email or password' });
@@ -168,6 +170,18 @@ export const getUserProfile = async (req, res) => {
     } else {
       res.status(404).json({ message: 'User not found' });
     }
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Get all users (for emergency access)
+// @route   GET /api/users/all
+// @access  Public
+export const getAllUsers = async (req, res) => {
+  try {
+    const users = await User.find({}, 'name email _id role').sort({ name: 1 });
+    res.json(users);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

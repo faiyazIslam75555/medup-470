@@ -6,6 +6,7 @@ import {
   adminLogin,
   getAdminProfile,
   getPatients,
+  deletePatient,
   // Doctor Management
   listDoctors,
   getDoctor,
@@ -42,6 +43,7 @@ router.get('/profile', getAdminProfile);
 
 // User (patients profiles)
 router.get('/patients', getPatients);
+router.delete('/patients/:id', deletePatient);
 
 // Doctor management routes
 router.get('/doctors', listDoctors);

@@ -30,7 +30,16 @@ function Login() {
 
       if (res.ok) {
         const data = await res.json();
+        console.log('Login response data:', data);
         localStorage.setItem('userToken', data.token);
+        
+        // Store user data for other components to use
+        if (data.user) {
+          localStorage.setItem('userData', JSON.stringify(data.user));
+          console.log('UserData stored in localStorage:', data.user);
+        } else {
+          console.error('No user data in login response');
+        }
         
         if (data.nextPath) {
           navigate(data.nextPath);

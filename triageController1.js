@@ -1,5 +1,5 @@
 // controllers/triageController.js
-// Smart Symptom Search → Specialist → Bookable Doctors (Database-Driven)
+// Smart Symptom Search → Specialist → Bookable Doctors (Rule-Based)
 
 import fs from 'fs';
 import path from 'path';
@@ -31,56 +31,18 @@ const SYNONYMS = loadConfig('synonyms.json');
 const SYMPTOM_WEIGHTS = loadConfig('symptom_weights.json');
 const SYMPTOM_SPECIALTY_MATRIX = loadConfig('symptom_specialty_matrix.json');
 
-// Cache for specialties to avoid repeated database queries
-let specialtiesCache = null;
-let cacheTimestamp = null;
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-
-// Get available specialties from database with caching
-const getAvailableSpecialties = async () => {
-  try {
-    // Return cached data if still valid
-    if (specialtiesCache && cacheTimestamp && (Date.now() - cacheTimestamp) < CACHE_DURATION) {
-      return specialtiesCache;
-    }
-
-    const Doctor = (await import('../models/Doctor.js')).default;
-    const specialties = await Doctor.distinct('specialty');
-    const filteredSpecialties = specialties.filter(specialty => specialty && specialty.trim() !== '');
-    
-    // Update cache
-    specialtiesCache = filteredSpecialties;
-    cacheTimestamp = Date.now();
-    
-    console.log(`Loaded ${filteredSpecialties.length} specialties from database:`, filteredSpecialties);
-    return filteredSpecialties;
-  } catch (error) {
-    console.error('Error getting specialties from database:', error);
-    return specialtiesCache || []; // Return cached data if available, otherwise empty array
-  }
-};
-
-// Enhanced Gemini integration with database specialties
-const handleUnknownSymptoms = async (symptoms, availableSpecialties) => {
+const handleUnknownSymptoms = async (symptoms) => {
   const unknownSymptoms = symptoms.filter(symptom => 
     !SYMPTOMS.map(s => s.toLowerCase()).includes(symptom.toLowerCase())
   );
   
   if (unknownSymptoms.length === 0) return null;
   
-  // Create a more specific prompt with available specialties
-  const specialtiesList = availableSpecialties.join(', ');
-  const prompt = `Based on these symptoms: ${unknownSymptoms.join(', ')}, which medical specialty from this list would be most appropriate: ${specialtiesList}? Answer with just the specialty name from the list.`;
-  
+  const prompt = `What medical specialty handles these symptoms: ${unknownSymptoms.join(', ')}? Answer with just the specialty name.`;
   const geminiResult = await callGemini(prompt);
   
-  // Validate that Gemini's response is in our available specialties
-  const validSpecialty = availableSpecialties.find(specialty => 
-    specialty.toLowerCase() === geminiResult?.toLowerCase()
-  );
-  
-  return validSpecialty ? {
-    specialty: validSpecialty,
+  return geminiResult ? {
+    specialty: geminiResult,
     symptoms: unknownSymptoms
   } : null;
 };
@@ -107,18 +69,6 @@ export const getSymptomSuggestions = async (req, res) => {
   }
 };
 
-// GET /api/triage/specialties
-// Get available specialties from database
-export const getAvailableSpecialtiesEndpoint = async (req, res) => {
-  try {
-    const specialties = await getAvailableSpecialties();
-    res.json(specialties);
-  } catch (error) {
-    console.error('Error getting available specialties:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-};
-
 // POST /api/triage/search
 // Analyze symptoms and recommend specialty + doctors
 export const searchBySymptoms = async (req, res) => {
@@ -129,33 +79,29 @@ export const searchBySymptoms = async (req, res) => {
       return res.status(400).json({ message: 'Please select at least one symptom' });
     }
 
-    // Get available specialties from database
-    const availableSpecialties = await getAvailableSpecialties();
-    
     // Normalize and map symptoms to canonical form
     const normalizedSymptoms = symptoms.map(symptom => {
       const normalized = symptom.toLowerCase().trim();
       return SYNONYMS[normalized] || normalized;
     });
 
-    // Check for unknown symptoms and get Gemini suggestion with database specialties
-    const unknownSymptomResult = await handleUnknownSymptoms(normalizedSymptoms, availableSpecialties);
+    // Check for unknown symptoms and get Gemini suggestion
+    const unknownSymptomResult = await handleUnknownSymptoms(normalizedSymptoms);
 
-    // Calculate specialty scores - only for specialties that exist in database
+    // Calculate specialty scores
     const specialtyScores = {};
     
-    // Base scoring from symptom-specialty matrix, filtered by available specialties
+    // Base scoring from symptom-specialty matrix
     normalizedSymptoms.forEach(symptom => {
       const weights = SYMPTOM_WEIGHTS[symptom] || 1.0;
       const matrix = SYMPTOM_SPECIALTY_MATRIX[symptom] || {};
       
       Object.entries(matrix).forEach(([specialty, score]) => {
-        // Only include specialties that exist in our database
-        if (availableSpecialties.includes(specialty)) {
-          specialtyScores[specialty] = (specialtyScores[specialty] || 0) + (weights * score);
-        }
+        specialtyScores[specialty] = (specialtyScores[specialty] || 0) + (weights * score);
       });
     });
+
+
 
     // Rank specialties (threshold: 0.35)
     const rankedSpecialties = Object.entries(specialtyScores)
@@ -168,12 +114,9 @@ export const searchBySymptoms = async (req, res) => {
       rankedSpecialties.unshift([unknownSymptomResult.specialty, 0.8]);
     }
 
-    // Fallback to first available specialty if no specialty passes threshold
+    // Fallback to General Medicine if no specialty passes threshold
     if (rankedSpecialties.length === 0) {
-      const fallbackSpecialty = availableSpecialties.find(s => s.toLowerCase().includes('general')) || availableSpecialties[0];
-      if (fallbackSpecialty) {
-        rankedSpecialties.push([fallbackSpecialty, 0.5]);
-      }
+      rankedSpecialties.push(['General Medicine', 0.5]);
     }
 
     // Get recommended doctors for top specialty
@@ -186,7 +129,6 @@ export const searchBySymptoms = async (req, res) => {
       alternativeSpecialty: rankedSpecialties[1] ? rankedSpecialties[1][0] : null,
       specialtyScores: rankedSpecialties,
       recommendedDoctors,
-      availableSpecialties, // Include available specialties in response
       geminiEnhancement: unknownSymptomResult ? {
         unknownSymptoms: unknownSymptomResult.symptoms,
         aiSpecialty: unknownSymptomResult.specialty
@@ -205,7 +147,7 @@ async function getAvailableDoctors(specialty, date) {
     // Import Doctor model dynamically to avoid circular dependencies
     const Doctor = (await import('../models/Doctor.js')).default;
     const User = (await import('../models/User.js')).default;
-    const UnifiedTimeSlot = (await import('../models/UnifiedTimeSlot.js')).default;
+    const TimeSlot = (await import('../models/TimeSlot.js')).default;
 
     // Find all doctors with the specified specialty
     const doctors = await Doctor.find({ specialty: specialty })
@@ -216,11 +158,11 @@ async function getAvailableDoctors(specialty, date) {
       return [];
     }
 
-    // Return doctors with available time slots from the unified system
+    // Return doctors with available time slots from the central TimeSlot system
     const doctorsWithInfo = await Promise.all(doctors.map(async (doctor) => {
       // Get available time slots for this doctor
-      const availableSlots = await UnifiedTimeSlot.find({
-        doctor: doctor._id,
+      const availableSlots = await TimeSlot.find({
+        assignedTo: doctor._id,
         status: 'ASSIGNED'
       }).sort({ dayOfWeek: 1, timeSlot: 1 });
 

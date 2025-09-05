@@ -69,6 +69,27 @@ export const getPatients = async (req, res) => {
   }
 };
 
+// DELETE /api/admin/patients/:id
+export const deletePatient = async (req, res) => {
+  try {
+    const patient = await User.findById(req.params.id);
+    if (!patient) {
+      return res.status(404).json({ message: 'Patient not found' });
+    }
+
+    if (patient.role !== 'patient') {
+      return res.status(400).json({ message: 'User is not a patient' });
+    }
+
+    // Delete the patient user
+    await User.findByIdAndDelete(patient._id);
+
+    res.json({ message: 'Patient deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 
 
 

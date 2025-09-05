@@ -27,7 +27,8 @@ const prescriptionSchema = new mongoose.Schema(
       medicineName: { type: String, required: true },
       quantity: { type: Number, required: true, min: 1 },
       price: { type: Number, required: true, min: 0 }, // Price at time of prescription
-      instructions: { type: String, trim: true }, // e.g., "Take twice daily"
+      instructions: { type: String, trim: true }, // e.g., "After meals"
+      frequency: { type: Number, required: true, min: 1, max: 6, default: 1 }, // Times per day
       total: { type: Number, required: true, min: 0 } // quantity * price
     }],
     // ADDED: Total amount for the entire prescription
@@ -41,6 +42,11 @@ const prescriptionSchema = new mongoose.Schema(
       type: String,
       enum: ['active', 'completed', 'cancelled'],
       default: 'active',
+    },
+    // ADDED: Invoice reference
+    invoiceId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Invoice',
     },
     // Keep your existing referral fields
     referredDoctor: {

@@ -10,7 +10,8 @@ import {
   getDoctorAppointments,
   getAppointmentById,
   updateAppointment,
-  cancelAppointment
+  cancelAppointment,
+  completeAppointment
 } from '../controllers/AppointmentController.js';
 
 const router = express.Router();
@@ -50,7 +51,13 @@ router.post('/', protect, createAppointment);
 // Get patient's appointments
 router.get('/', protect, getPatientAppointments);
 
-// Get specific appointment
+// Get doctor's appointments - MUST come before /:id route
+router.get('/doctor/me', protect, getDoctorAppointments);
+
+// Get patient appointments by ID
+router.get('/patient/:patientId', protect, getPatientAppointmentsById);
+
+// Get specific appointment - MUST come after specific routes
 router.get('/:id', protect, getAppointmentById);
 
 // Update appointment
@@ -58,5 +65,8 @@ router.put('/:id', protect, updateAppointment);
 
 // Cancel appointment
 router.delete('/:id', protect, cancelAppointment);
+
+// Complete appointment (for doctors)
+router.put('/:id/complete', protect, completeAppointment);
 
 export default router;

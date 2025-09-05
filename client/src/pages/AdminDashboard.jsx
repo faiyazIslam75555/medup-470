@@ -13,6 +13,8 @@ function AdminDashboard() {
   const [patients, setPatients] = useState([]); // Added patients state
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('pending-requests');
+  const [emergencyLogs, setEmergencyLogs] = useState([]);
+  const [emergencyAccessStatus, setEmergencyAccessStatus] = useState({});
   
   const navigate = useNavigate();
 
@@ -57,13 +59,13 @@ function AdminDashboard() {
         }
       }
       
-      // Fetch time slots
-      const slotRes = await fetch(`${API_BASE_URL}/api/time-slots`, {
+      // Fetch time slots from unified system
+      const slotRes = await fetch(`${API_BASE_URL}/api/unified-time-slots/admin/all`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (slotRes.ok) {
         const slotData = await slotRes.json();
-        setTimeSlots(slotData.timeSlots || []);
+        setTimeSlots(slotData.slots || []);
       }
 
       // Fetch leave requests
@@ -73,6 +75,23 @@ function AdminDashboard() {
       if (leaveRes.ok) {
         const leaveData = await leaveRes.json();
         setLeaveRequests(leaveData);
+      }
+
+      // Fetch emergency access logs
+      try {
+        const emergencyRes = await fetch(`${API_BASE_URL}/api/emergency/logs`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (emergencyRes.ok) {
+          const emergencyData = await emergencyRes.json();
+          setEmergencyLogs(emergencyData.logs || []);
+        } else {
+          console.error('Failed to fetch emergency logs:', emergencyRes.status);
+          setEmergencyLogs([]);
+        }
+      } catch (emergencyError) {
+        console.log('Error fetching emergency logs:', emergencyError);
+        setEmergencyLogs([]);
       }
 
       // Fetch doctors
@@ -108,7 +127,7 @@ function AdminDashboard() {
   const approveTimeSlot = async (id) => {
     try {
       const token = localStorage.getItem('adminToken');
-      const res = await fetch(`${API_BASE_URL}/api/time-slots/${id}/approve`, {
+      const res = await fetch(`${API_BASE_URL}/api/unified-time-slots/admin/${id}/approve`, {
         method: 'PATCH',
         headers: { 
           'Content-Type': 'application/json',
@@ -131,11 +150,11 @@ function AdminDashboard() {
   const rejectTimeSlot = async (id) => {
     try {
       const token = localStorage.getItem('adminToken');
-      const res = await fetch(`${API_BASE_URL}/api/time-slots/${id}/reject`, {
+      const res = await fetch(`${API_BASE_URL}/api/unified-time-slots/admin/${id}/reject`, {
         method: 'PATCH',
         headers: { 
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
+          Authorization: `Bearer ${token}` 
         },
         body: JSON.stringify({ reason: 'Rejected by admin' })
       });
@@ -207,6 +226,126 @@ function AdminDashboard() {
     }
   };
 
+  // Patient deletion function
+  const deletePatient = async (patientId) => {
+    if (!window.confirm('Are you sure you want to permanently delete this patient? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('adminToken');
+      const res = await fetch(`${API_BASE_URL}/api/admin/patients/${patientId}`, {
+        method: 'DELETE',
+        headers: { 
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      if (res.ok) {
+        alert('Patient deleted successfully!');
+        fetchData(); // Refresh data
+      } else {
+        const errorData = await res.json();
+        alert(errorData.message || 'Failed to delete patient');
+      }
+    } catch (err) {
+      alert('Network error. Please try again.');
+    }
+  };
+
+  // Doctor deletion function
+  const deleteDoctor = async (doctorId) => {
+    if (!window.confirm('Are you sure you want to permanently delete this doctor? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('adminToken');
+      const res = await fetch(`${API_BASE_URL}/api/admin/doctors/${doctorId}`, {
+        method: 'DELETE',
+        headers: { 
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      if (res.ok) {
+        alert('Doctor deleted successfully!');
+        fetchData(); // Refresh data
+      } else {
+        const errorData = await res.json();
+        alert(errorData.message || 'Failed to delete doctor');
+      }
+    } catch (err) {
+      alert('Network error. Please try again.');
+    }
+  };
+
+  const grantEmergencyAccess = async (doctorId) => {
+    try {
+      const token = localStorage.getItem('adminToken');
+      const response = await fetch(`${API_BASE_URL}/api/emergency/grant-privileges`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}` 
+        },
+        body: JSON.stringify({ doctorId })
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        setEmergencyAccessStatus(prev => ({
+          ...prev,
+          [doctorId]: true
+        }));
+        alert('Emergency access privileges granted successfully');
+        // Refresh doctors list to get updated status
+        fetchData();
+      } else {
+        const error = await response.json();
+        alert(`Failed to grant emergency access: ${error.message}`);
+      }
+    } catch (error) {
+      console.error('Error granting emergency access:', error);
+      alert('Error granting emergency access');
+    }
+  };
+
+  const revokeEmergencyAccess = async (doctorId) => {
+    if (window.confirm('Are you sure you want to revoke emergency access privileges?')) {
+      try {
+        const token = localStorage.getItem('adminToken');
+        const response = await fetch(`${API_BASE_URL}/api/emergency/revoke-privileges`, {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}` 
+          },
+          body: JSON.stringify({ doctorId })
+        });
+        
+        if (response.ok) {
+          const result = await response.json();
+          setEmergencyAccessStatus(prev => ({
+            ...prev,
+            [doctorId]: false
+          }));
+          alert('Emergency access privileges revoked successfully');
+          // Refresh doctors list to get updated status
+          fetchData();
+        } else {
+          const error = await response.json();
+          alert(`Failed to revoke emergency access: ${error.message}`);
+        }
+      } catch (error) {
+        console.error('Error revoking emergency access:', error);
+        alert('Error revoking emergency access');
+      }
+    }
+  };
+
   const renderTabContent = () => {
     switch (activeTab) {
       case 'pending-requests':
@@ -217,14 +356,14 @@ function AdminDashboard() {
             
             {/* Pending Requests Count */}
             <div style={{ marginBottom: '20px' }}>
-              <h3>Pending Requests: {timeSlots.filter(slot => slot.status === 'PENDING').length}</h3>
+              <h3>Pending Requests: {timeSlots.filter(slot => slot.status === 'AVAILABLE' && slot.doctor).length}</h3>
               <p>These time slots have been requested by doctors and need your approval.</p>
             </div>
 
             {/* Show Only Pending Slots */}
-            {timeSlots.filter(slot => slot.status === 'PENDING').length > 0 ? (
+            {timeSlots.filter(slot => slot.status === 'AVAILABLE' && slot.doctor).length > 0 ? (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '15px' }}>
-                {timeSlots.filter(slot => slot.status === 'PENDING').map((slot) => {
+                {timeSlots.filter(slot => slot.status === 'AVAILABLE' && slot.doctor).map((slot) => {
                   const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
                   const dayName = days[slot.dayOfWeek];
                   
@@ -247,20 +386,20 @@ function AdminDashboard() {
                           backgroundColor: '#ffc107',
                           color: '#333'
                         }}>
-                          PENDING
+                          PENDING APPROVAL
                         </span>
                       </div>
                       
-                      {slot.assignedTo && (
+                                            {slot.doctor && (
                         <div style={{ marginBottom: '15px' }}>
                           <p style={{ margin: '5px 0', fontSize: '14px' }}>
-                            <strong>Doctor:</strong> {slot.assignedTo.user?.name || 'Unknown'}
+                            <strong>Doctor:</strong> {slot.doctor.name || 'Unknown'}
                           </p>
                           <p style={{ margin: '5px 0', fontSize: '14px' }}>
-                            <strong>Email:</strong> {slot.assignedTo.user?.email || 'N/A'}
+                            <strong>Email:</strong> {slot.doctor.email || 'N/A'}
                           </p>
                           <p style={{ margin: '5px 0', fontSize: '14px' }}>
-                            <strong>Specialty:</strong> {slot.assignedTo.specialty || 'N/A'}
+                            <strong>Specialty:</strong> {slot.doctor.specialty || 'N/A'}
                           </p>
                         </div>
                       )}
@@ -335,7 +474,7 @@ function AdminDashboard() {
               <div style={{ textAlign: 'center', padding: '15px', backgroundColor: '#fff3cd', borderRadius: '8px' }}>
                 <h4 style={{ margin: '0 0 5px 0', color: '#ffc107' }}>Pending</h4>
                 <p style={{ fontSize: '20px', fontWeight: 'bold', margin: 0, color: '#ffc107' }}>
-                  {timeSlots.filter(slot => slot.status === 'PENDING').length}
+                  {timeSlots.filter(slot => slot.status === 'AVAILABLE' && slot.doctor).length}
                 </p>
               </div>
               <div style={{ textAlign: 'center', padding: '15px', backgroundColor: '#d1ecf1', borderRadius: '8px' }}>
@@ -545,7 +684,7 @@ function AdminDashboard() {
                   borderBottom: index < patients.length - 1 ? '1px solid #eee' : 'none'
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
+                    <div style={{ flex: 1 }}>
                       <h3 style={{ margin: '0 0 5px 0', color: '#333' }}>{patient.name || patient.user?.name || 'Unknown'}</h3>
                       <p style={{ margin: '2px 0', color: '#666' }}>
                         <strong>Email:</strong> {patient.email || patient.user?.email || 'N/A'}
@@ -559,8 +698,27 @@ function AdminDashboard() {
                         </p>
                       )}
                     </div>
-                    <div style={{ color: '#999', fontSize: '14px' }}>
-                      Registered: {new Date(patient.createdAt).toLocaleDateString()}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                      <div style={{ color: '#999', fontSize: '14px' }}>
+                        Registered: {new Date(patient.createdAt).toLocaleDateString()}
+                      </div>
+                      <button
+                        onClick={() => deletePatient(patient._id)}
+                        style={{
+                          padding: '6px 12px',
+                          backgroundColor: '#dc3545',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '12px',
+                          fontWeight: 'bold'
+                        }}
+                        onMouseEnter={(e) => e.target.style.backgroundColor = '#c82333'}
+                        onMouseLeave={(e) => e.target.style.backgroundColor = '#dc3545'}
+                      >
+                        Remove
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -592,7 +750,7 @@ function AdminDashboard() {
                   borderBottom: index < doctors.length - 1 ? '1px solid #eee' : 'none'
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
+                    <div style={{ flex: 1 }}>
                       <h3 style={{ margin: '0 0 5px 0', color: '#333' }}>{doctor.user?.name || 'Unknown'}</h3>
                       <p style={{ margin: '2px 0', color: '#666' }}>
                         <strong>Email:</strong> {doctor.user?.email || 'N/A'}
@@ -604,8 +762,82 @@ function AdminDashboard() {
                         <strong>Specialty:</strong> {doctor.specialty || 'N/A'}
                       </p>
                     </div>
-                    <div style={{ color: '#999', fontSize: '14px' }}>
-                      Registered: {new Date(doctor.createdAt).toLocaleDateString()}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                      <div style={{ color: '#999', fontSize: '14px' }}>
+                        Registered: {new Date(doctor.createdAt).toLocaleDateString()}
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        {/* Emergency Access Status */}
+                        <div style={{ 
+                          padding: '4px 8px', 
+                          borderRadius: '4px', 
+                          fontSize: '11px',
+                          fontWeight: 'bold',
+                          backgroundColor: doctor.hasEmergencyAccess ? '#d4edda' : '#f8d7da',
+                          color: doctor.hasEmergencyAccess ? '#155724' : '#721c24',
+                          border: `1px solid ${doctor.hasEmergencyAccess ? '#c3e6cb' : '#f5c6cb'}`
+                        }}>
+                          {doctor.hasEmergencyAccess ? '🚨 EMERGENCY ACCESS' : 'No Emergency Access'}
+                        </div>
+                        
+                        {/* Emergency Access Buttons */}
+                        {!doctor.hasEmergencyAccess ? (
+                          <button
+                            onClick={() => grantEmergencyAccess(doctor._id)}
+                            style={{
+                              padding: '6px 12px',
+                              backgroundColor: '#28a745',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '12px',
+                              fontWeight: 'bold'
+                            }}
+                            onMouseEnter={(e) => e.target.style.backgroundColor = '#218838'}
+                            onMouseLeave={(e) => e.target.style.backgroundColor = '#28a745'}
+                          >
+                            Grant Emergency Access
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => revokeEmergencyAccess(doctor._id)}
+                            style={{
+                              padding: '6px 12px',
+                              backgroundColor: '#ffc107',
+                              color: '#212529',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '12px',
+                              fontWeight: 'bold'
+                            }}
+                            onMouseEnter={(e) => e.target.style.backgroundColor = '#e0a800'}
+                            onMouseLeave={(e) => e.target.style.backgroundColor = '#ffc107'}
+                          >
+                            Revoke Access
+                          </button>
+                        )}
+                        
+                        {/* Remove Button */}
+                        <button
+                          onClick={() => deleteDoctor(doctor._id)}
+                          style={{
+                            padding: '6px 12px',
+                            backgroundColor: '#dc3545',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '12px',
+                            fontWeight: 'bold'
+                          }}
+                          onMouseEnter={(e) => e.target.style.backgroundColor = '#c82333'}
+                          onMouseLeave={(e) => e.target.style.backgroundColor = '#dc3545'}
+                        >
+                          Remove
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -659,6 +891,65 @@ function AdminDashboard() {
                 <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
                   No staff members registered
                 </div>
+              )}
+            </div>
+          </div>
+        );
+      
+      case 'emergency-access':
+        return (
+          <div>
+            <h2 style={{ color: '#dc3545', marginBottom: '10px' }}>🚨 Emergency Access Logs</h2>
+            <p style={{ color: '#666', marginBottom: '20px' }}>Monitor all emergency access events and doctor privileges</p>
+            
+            <div style={{ 
+              backgroundColor: 'white', 
+              borderRadius: '8px', 
+              padding: '20px',
+              border: '1px solid #ddd'
+            }}>
+              {(!emergencyLogs || emergencyLogs.length === 0) ? (
+                <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
+                  <h3>No Emergency Access Events</h3>
+                  <p>No emergency access events have been recorded yet.</p>
+                </div>
+              ) : (
+                (emergencyLogs || []).map((log, index) => (
+                  <div key={index} style={{
+                    padding: '15px 0',
+                    borderBottom: index < (emergencyLogs || []).length - 1 ? '1px solid #eee' : 'none'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <h3 style={{ margin: '0 0 5px 0', color: '#333' }}>
+                          Doctor: {log.doctor?.name || 'Unknown Doctor'}
+                        </h3>
+                        <p style={{ margin: '2px 0', color: '#666' }}>
+                          <strong>Patient:</strong> {log.patient?.name || 'Unknown Patient'}
+                        </p>
+                        <p style={{ margin: '2px 0', color: '#666' }}>
+                          <strong>Reason:</strong> {log.reason}
+                        </p>
+                        <p style={{ margin: '2px 0', color: '#666' }}>
+                          <strong>Time:</strong> {new Date(log.createdAt).toLocaleString()}
+                        </p>
+                        <p style={{ margin: '2px 0', color: '#666' }}>
+                          <strong>IP Address:</strong> {log.ipAddress || 'Unknown'}
+                        </p>
+                      </div>
+                      <div style={{ 
+                        padding: '8px 12px', 
+                        backgroundColor: '#dc3545', 
+                        color: 'white', 
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        fontWeight: 'bold'
+                      }}>
+                        EMERGENCY ACCESS
+                      </div>
+                    </div>
+                  </div>
+                ))
               )}
             </div>
           </div>
@@ -862,7 +1153,7 @@ function AdminDashboard() {
               fontSize: '14px'
             }}
           >
-            Pending Requests ({timeSlots.filter(slot => slot.status === 'PENDING').length})
+                            Pending Requests ({timeSlots.filter(slot => slot.status === 'AVAILABLE' && slot.doctor).length})
           </button>
           <button
             onClick={() => setActiveTab('time-slots')}
@@ -933,6 +1224,20 @@ function AdminDashboard() {
             }}
           >
             Staff
+          </button>
+          <button
+            onClick={() => setActiveTab('emergency-access')}
+            style={{
+              padding: '12px 24px',
+              backgroundColor: activeTab === 'emergency-access' ? '#dc3545' : 'white',
+              color: activeTab === 'emergency-access' ? 'white' : '#333',
+              border: '1px solid #ddd',
+              borderRadius: '5px',
+              cursor: 'pointer',
+              fontSize: '14px'
+            }}
+          >
+            🚨 Emergency Access ({(emergencyLogs || []).length})
           </button>
         </div>
 

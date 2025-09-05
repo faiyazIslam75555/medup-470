@@ -15,6 +15,8 @@ import InvoicesPage from "./pages/InvoicesPage";
 import SymptomSearch from "./components/SymptomSearch";
 import AppointmentPage from "./pages/AppointmentPage";
 import EMRPage from "./pages/EMRPage";
+import VitalsPage from "./pages/VitalsPage";
+import EmergencyAccessPage from "./pages/EmergencyAccessPage";
 import { isAdminLoggedIn, isUserLoggedIn, logoutAdmin, logoutUser } from "./utils/auth";
 
 function App() {
@@ -22,6 +24,9 @@ function App() {
     <Routes>
       {/* Landing */}
       <Route path="/" element={<LandingPage />} />
+
+      {/* Emergency Access */}
+      <Route path="/emergency-access" element={<EmergencyAccessPage />} />
 
       {/* Admin Login */}
       <Route path="/admin-login" element={<AdminLogin />} />
@@ -137,6 +142,16 @@ function App() {
         element={
           isUserLoggedIn()
             ? <EMRPage />
+            : <Navigate to="/login" />
+        }
+      />
+
+      {/* Vitals Management */}
+      <Route
+        path="/vitals"
+        element={
+          isUserLoggedIn()
+            ? <VitalsPage />
             : <Navigate to="/login" />
         }
       />

@@ -25,15 +25,27 @@ export const getAllDoctors = async (req, res) => {
 
 // Create prescription (automatically generates invoice)
 export const createPrescription = async (req, res) => {
-  const { patient, doctor, disease, prescribedMedicines, referredDoctor, referredDoctorName } = req.body;
+  const { patient, disease, prescribedMedicines, referredDoctor, referredDoctorName } = req.body;
   
   try {
-    // Validate patient and doctor exist with correct roles
-    const patientUser = await User.findOne({ _id: patient, role: 'patient' });
-    const doctorUser = await User.findOne({ _id: doctor, role: 'doctor' });
+    // Get doctor ID from authenticated user (from protect middleware)
+    const doctor = req.user.id;
     
-    if (!patientUser) return res.status(400).json({ message: 'Valid patient not found' });
-    if (!doctorUser) return res.status(400).json({ message: 'Valid doctor not found' });
+    // Validate patient exists
+    console.log('Looking for patient with ID:', patient);
+    console.log('Patient ID type:', typeof patient);
+    console.log('Patient ID length:', patient ? patient.length : 'undefined');
+    
+    const patientUser = await User.findOne({ _id: patient, role: 'patient' });
+    console.log('Found patient:', patientUser ? 'Yes' : 'No');
+    if (patientUser) {
+      console.log('Patient details:', { id: patientUser._id, name: patientUser.name, role: patientUser.role });
+    }
+    
+    if (!patientUser) {
+      console.log('Patient validation failed for ID:', patient);
+      return res.status(400).json({ message: 'Valid patient not found' });
+    }
 
     // Process medicines and get current prices from inventory
     const processedMedicines = [];
@@ -54,6 +66,7 @@ export const createPrescription = async (req, res) => {
         quantity: med.quantity,
         price: inventoryItem.price,
         instructions: med.instructions || '',
+        frequency: med.frequency || 1,
         total: medicineTotal
       });
       totalAmount += medicineTotal;
@@ -70,10 +83,24 @@ export const createPrescription = async (req, res) => {
       referredDoctorName: referredDoctorName || undefined
     });
 
+    console.log('Creating prescription with data:', {
+      patient,
+      doctor,
+      disease,
+      prescribedMedicines: processedMedicines.length,
+      totalAmount
+    });
+
     await prescription.save();
+    
+    console.log('Prescription saved successfully with ID:', prescription._id);
     
     // Automatically generate invoice
     const invoice = await generateInvoiceForPrescription(prescription);
+
+    // Update prescription with invoice ID
+    prescription.invoiceId = invoice._id;
+    await prescription.save();
 
     res.status(201).json({
       prescription,
@@ -104,14 +131,20 @@ export const getPrescriptionsByPatient = async (req, res) => {
   try {
     const { patientId } = req.params;
     
+    console.log('getPrescriptionsByPatient - Looking for patient ID:', patientId);
+    
     const prescriptions = await Prescription.find({ patient: patientId })
       .populate('patient', 'name email phoneNumber')
       .populate('doctor', 'name email')
       .populate('prescribedMedicines.medicineId', 'name price quantity')
       .sort({ createdAt: -1 });
     
+    console.log('getPrescriptionsByPatient - Found prescriptions:', prescriptions.length);
+    console.log('getPrescriptionsByPatient - Prescriptions:', prescriptions);
+    
     res.json({ prescriptions });
   } catch (err) {
+    console.error('getPrescriptionsByPatient - Error:', err);
     res.status(500).json({ message: err.message });
   }
 };

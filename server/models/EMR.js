@@ -24,6 +24,25 @@ const externalPrescriptionSchema = new mongoose.Schema(
   { _id: false }
 );
 
+// NEW: Vitals schema for patient health monitoring
+const vitalsSchema = new mongoose.Schema(
+  {
+    date: {
+      type: Date,
+      default: Date.now,
+    },
+    bloodPressure: {
+      systolic: { type: Number, min: 50, max: 300 },
+      diastolic: { type: Number, min: 30, max: 200 }
+    },
+    heartRate: { type: Number, min: 30, max: 200 },
+    temperature: { type: Number, min: 30, max: 45 },
+    weight: { type: Number, min: 0, max: 500 },
+    notes: { type: String, trim: true, maxlength: 200 }
+  },
+  { _id: false }
+);
+
 const emrSchema = new mongoose.Schema(
   {
     patient: {
@@ -40,19 +59,13 @@ const emrSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Prescription"
     }],
-    labTests: [{
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "LabTestOrder"
-    }],
-    labResults: [{
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "LabTestResult"
-    }],
     invoices: [{
       type: mongoose.Schema.Types.ObjectId,
       ref: "Invoice"
     }],
-    externalPrescriptions: [externalPrescriptionSchema] // Patient-uploaded past medical docs
+    externalPrescriptions: [externalPrescriptionSchema], // Patient-uploaded past medical docs
+    // NEW: Patient vitals tracking
+    vitals: [vitalsSchema]
   },
   { timestamps: true }
 );

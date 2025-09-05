@@ -11,8 +11,32 @@ function EMRPage() {
   const [appointments, setAppointments] = useState([]);
   const [medicalHistory, setMedicalHistory] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [selectedPrescription, setSelectedPrescription] = useState(null);
+  const [patientId, setPatientId] = useState(null);
   const navigate = useNavigate();
+
+  // Helper function to safely format dates
+  const formatDate = (dateString) => {
+    if (!dateString) return 'Date not available';
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return 'Invalid date';
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      });
+    } catch (error) {
+      return 'Invalid date';
+    }
+  };
+
+  // Helper function to get appointment date field
+  const getAppointmentDate = (appointment) => {
+    return appointment.appointmentDate || appointment.date || appointment.scheduledDate;
+  };
 
   useEffect(() => {
     const token = localStorage.getItem('userToken');
@@ -26,35 +50,91 @@ function EMRPage() {
   const fetchData = async () => {
     try {
       const token = localStorage.getItem('userToken');
-      const userData = JSON.parse(localStorage.getItem('userData'));
-      const patientId = userData?.id;
-
-      // Fetch profile
+      const userDataString = localStorage.getItem('userData');
+      console.log('Raw userData from localStorage:', userDataString);
+      
+      let userData = null;
+      if (userDataString) {
+        try {
+          userData = JSON.parse(userDataString);
+          console.log('Parsed userData:', userData);
+        } catch (parseError) {
+          console.error('Error parsing userData from localStorage:', parseError);
+          localStorage.removeItem('userData'); // Remove corrupted data
+        }
+      }
+      
+      let extractedPatientId = userData?._id || userData?.id;
+      console.log('Extracted patientId:', extractedPatientId);
+      
+      if (!userData) {
+        console.log('No userData found in localStorage');
+      }
+      
+      // If userData is missing, fetch it from the profile endpoint
+      if (!extractedPatientId) {
+        console.log('UserData missing, fetching from profile endpoint...');
+        try {
       const profileRes = await fetch(`${API_BASE_URL}/api/users/profile`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (profileRes.ok) {
         const profileData = await profileRes.json();
-        setProfile(profileData);
+            extractedPatientId = profileData._id || profileData.id;
+            userData = profileData; // Update the userData variable
+            // Store the profile data for future use
+            localStorage.setItem('userData', JSON.stringify(profileData));
+            console.log('UserData fetched and stored:', profileData);
+          } else {
+            console.error('Failed to fetch profile:', profileRes.status, profileRes.statusText);
+          }
+        } catch (profileError) {
+          console.error('Error fetching profile:', profileError);
+        }
+      }
+      
+      if (!extractedPatientId) {
+        console.error('Patient ID not found after all attempts. UserData:', userData);
+        setLoading(false);
+        return;
       }
 
+      // Set the patientId state
+      setPatientId(extractedPatientId);
+
+      // Set profile data
+      if (userData) {
+        setProfile(userData);
+      }
+
+      // Fetch data - Only if extractedPatientId is available
+      if (extractedPatientId) {
       // Fetch prescriptions
-      const prescriptionsRes = await fetch(`${API_BASE_URL}/api/prescriptions/my-prescriptions`, {
+        try {
+          const prescriptionsRes = await fetch(`${API_BASE_URL}/api/prescriptions/patient/${extractedPatientId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (prescriptionsRes.ok) {
         const prescriptionsData = await prescriptionsRes.json();
         setPrescriptions(prescriptionsData.prescriptions || []);
-      }
-
-      // Fetch appointments - Updated to fetch real data
-      try {
-        const appointmentsRes = await fetch(`${API_BASE_URL}/api/appointments/patient/${patientId}`, {
+          } else {
+            console.log('Prescriptions endpoint not available, using empty array');
+            setPrescriptions([]);
+          }
+        } catch (prescriptionError) {
+          console.log('Error fetching prescriptions:', prescriptionError);
+          setPrescriptions([]);
+        }
+        try {
+          const appointmentsRes = await fetch(`${API_BASE_URL}/api/appointments/patient/${extractedPatientId}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         if (appointmentsRes.ok) {
           const appointmentsData = await appointmentsRes.json();
-          setAppointments(appointmentsData || []);
+            // Ensure appointmentsData is an array
+            const appointmentsArray = Array.isArray(appointmentsData) ? appointmentsData : 
+                                    Array.isArray(appointmentsData?.appointments) ? appointmentsData.appointments : [];
+            setAppointments(appointmentsArray);
         } else {
           console.log('Appointments endpoint not available, using empty array');
           setAppointments([]);
@@ -64,20 +144,25 @@ function EMRPage() {
         setAppointments([]);
       }
 
-      // Fetch medical history - Updated to fetch real data
+        // Fetch medical history using timeline endpoint
       try {
-        const medicalHistoryRes = await fetch(`${API_BASE_URL}/api/medical-history/patient/${patientId}`, {
+          const medicalHistoryRes = await fetch(`${API_BASE_URL}/api/timeline/patient/${extractedPatientId}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         if (medicalHistoryRes.ok) {
           const medicalHistoryData = await medicalHistoryRes.json();
-          setMedicalHistory(medicalHistoryData || []);
+            setMedicalHistory(medicalHistoryData.timeline || []);
         } else {
-          console.log('Medical history endpoint not available, using empty array');
+            console.log('Timeline endpoint not available, using empty array');
           setMedicalHistory([]);
         }
       } catch (medicalHistoryError) {
         console.log('Error fetching medical history:', medicalHistoryError);
+          setMedicalHistory([]);
+        }
+      } else {
+        // Set empty arrays if no patientId
+        setAppointments([]);
         setMedicalHistory([]);
       }
 
@@ -94,43 +179,129 @@ function EMRPage() {
     navigate('/');
   };
 
+  // Payment handling functions
+  const handlePaymentClick = (prescription) => {
+    setSelectedPrescription(prescription);
+    setShowPaymentModal(true);
+  };
+
+  const handlePaymentSubmit = async () => {
+    if (!selectedPrescription) return;
+
+    try {
+      const token = localStorage.getItem('userToken');
+      
+      // If invoiceId is not available, find invoice by prescription ID
+      let invoiceId = selectedPrescription.invoiceId;
+      if (!invoiceId) {
+        // Find invoice by prescription ID
+        const invoiceResponse = await fetch(`${API_BASE_URL}/api/invoices/prescription/${selectedPrescription._id}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (invoiceResponse.ok) {
+          const invoiceData = await invoiceResponse.json();
+          invoiceId = invoiceData._id;
+        } else {
+          throw new Error('Invoice not found for this prescription');
+        }
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/invoices/${invoiceId}/pay`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          paymentMethod: 'cash',
+          amount: selectedPrescription.totalAmount
+        })
+      });
+
+      if (response.ok) {
+        alert('Order confirmed! Your prescription is ready for pickup. Please pay in cash when you collect it from the pharmacy.');
+        setShowPaymentModal(false);
+        setSelectedPrescription(null);
+        // Refresh prescriptions data
+        fetchData();
+      } else {
+        const errorData = await response.json();
+        alert(errorData.message || 'Payment failed. Please try again.');
+      }
+    } catch (error) {
+      console.error('Payment error:', error);
+      alert('Payment failed. Please try again.');
+    }
+  };
+
+  const closePaymentModal = () => {
+    setShowPaymentModal(false);
+    setSelectedPrescription(null);
+  };
+
   const renderTabContent = () => {
     switch (activeTab) {
-      case 'overview':
+      case 'dashboard':
         return (
           <div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', marginBottom: '30px' }}>
-              <div style={{ backgroundColor: '#e3f2fd', padding: '20px', borderRadius: '8px', textAlign: 'center' }}>
-                <h3 style={{ margin: '0 0 10px 0', color: '#1976d2' }}>📋 Prescriptions</h3>
-                <p style={{ fontSize: '24px', fontWeight: 'bold', margin: '0', color: '#1976d2' }}>{prescriptions.length}</p>
+              <div style={{ 
+                backgroundColor: 'white', 
+                padding: '25px', 
+                borderRadius: '12px', 
+                textAlign: 'center',
+                boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+                border: '1px solid #e9ecef'
+              }}>
+                <div style={{ fontSize: '32px', marginBottom: '10px' }}>📋</div>
+                <h3 style={{ margin: '0 0 10px 0', color: '#1976d2', fontSize: '16px', fontWeight: '600' }}>Prescriptions</h3>
+                <p style={{ fontSize: '28px', fontWeight: 'bold', margin: '0', color: '#1976d2' }}>{Array.isArray(prescriptions) ? prescriptions.length : 0}</p>
               </div>
-              <div style={{ backgroundColor: '#e8f5e8', padding: '20px', borderRadius: '8px', textAlign: 'center' }}>
-                <h3 style={{ margin: '0 0 10px 0', color: '#2e7d32' }}>📅 Appointments</h3>
-                <p style={{ fontSize: '24px', fontWeight: 'bold', margin: '0', color: '#2e7d32' }}>{appointments.length}</p>
+              <div style={{ 
+                backgroundColor: 'white', 
+                padding: '25px', 
+                borderRadius: '12px', 
+                textAlign: 'center',
+                boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+                border: '1px solid #e9ecef'
+              }}>
+                <div style={{ fontSize: '32px', marginBottom: '10px' }}>📅</div>
+                <h3 style={{ margin: '0 0 10px 0', color: '#2e7d32', fontSize: '16px', fontWeight: '600' }}>Appointments</h3>
+                <p style={{ fontSize: '28px', fontWeight: 'bold', margin: '0', color: '#2e7d32' }}>{Array.isArray(appointments) ? appointments.length : 0}</p>
               </div>
-              <div style={{ backgroundColor: '#fce4ec', padding: '20px', borderRadius: '8px', textAlign: 'center' }}>
-                <h3 style={{ margin: '0 0 10px 0', color: '#c2185b' }}>🏥 Medical Tests</h3>
-                <p style={{ fontSize: '24px', fontWeight: 'bold', margin: '0', color: '#c2185b' }}>{medicalHistory.length}</p>
+              <div style={{ 
+                backgroundColor: 'white', 
+                padding: '25px', 
+                borderRadius: '12px', 
+                textAlign: 'center',
+                boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+                border: '1px solid #e9ecef'
+              }}>
+                <div style={{ fontSize: '32px', marginBottom: '10px' }}>🏥</div>
+                <h3 style={{ margin: '0 0 10px 0', color: '#c2185b', fontSize: '16px', fontWeight: '600' }}>Medical Tests</h3>
+                <p style={{ fontSize: '28px', fontWeight: 'bold', margin: '0', color: '#c2185b' }}>{Array.isArray(medicalHistory) ? medicalHistory.length : 0}</p>
               </div>
             </div>
 
             {/* Recent Activity */}
             <div style={{ 
               backgroundColor: 'white', 
-              borderRadius: '8px', 
-              padding: '20px',
-              border: '1px solid #ddd'
+              borderRadius: '12px', 
+              padding: '25px',
+              boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+              border: '1px solid #e9ecef'
             }}>
-              <h3 style={{ color: '#333', marginBottom: '15px' }}>📊 Recent Activity</h3>
+              <h3 style={{ color: '#333', marginBottom: '20px', fontSize: '20px', fontWeight: '600' }}>📊 Recent Activity</h3>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
                 
                 {/* Recent Prescriptions */}
-                {prescriptions.slice(0, 2).map((prescription, index) => (
+                {Array.isArray(prescriptions) && prescriptions.slice(0, 2).map((prescription, index) => (
                   <div key={`prescription-${index}`} style={{
-                    padding: '15px',
-                    border: '1px solid #eee',
-                    borderRadius: '4px',
-                    backgroundColor: '#f8f9fa'
+                    padding: '20px',
+                    border: '1px solid #e9ecef',
+                    borderRadius: '10px',
+                    backgroundColor: '#f8f9fa',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
                   }}>
                     <h4 style={{ margin: '0 0 10px 0', color: '#333' }}>💊 {prescription.disease || 'Prescription'}</h4>
                     <p style={{ margin: '5px 0', color: '#666' }}><strong>Date:</strong> {new Date(prescription.createdAt).toLocaleDateString()}</p>
@@ -139,15 +310,16 @@ function EMRPage() {
                 ))}
 
                 {/* Recent Appointments */}
-                {appointments.slice(0, 2).map((appointment, index) => (
+                {Array.isArray(appointments) && appointments.slice(0, 2).map((appointment, index) => (
                   <div key={`appointment-${index}`} style={{
-                    padding: '15px',
-                    border: '1px solid #eee',
-                    borderRadius: '4px',
-                    backgroundColor: '#e8f5e8'
+                    padding: '20px',
+                    border: '1px solid #e9ecef',
+                    borderRadius: '10px',
+                    backgroundColor: '#e8f5e8',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
                   }}>
                     <h4 style={{ margin: '0 0 10px 0', color: '#333' }}>📅 Appointment</h4>
-                    <p style={{ margin: '5px 0', color: '#666' }}><strong>Date:</strong> {new Date(appointment.appointmentDate).toLocaleDateString()}</p>
+                    <p style={{ margin: '5px 0', color: '#666' }}><strong>Date:</strong> {formatDate(getAppointmentDate(appointment))}</p>
                     <p style={{ margin: '5px 0', color: '#666' }}><strong>Doctor:</strong> {appointment.doctor?.name || appointment.doctorName || 'N/A'}</p>
                     <p style={{ margin: '5px 0', color: '#666' }}><strong>Status:</strong> {appointment.status}</p>
                   </div>
@@ -158,12 +330,12 @@ function EMRPage() {
           </div>
         );
       
-      case 'prescriptions':
+      case 'medications':
         return (
           <div>
-            <h2 style={{ color: '#007bff', marginBottom: '20px' }}>💊 My Prescriptions</h2>
+            <h2 style={{ color: '#007bff', marginBottom: '20px' }}>💊 My Medications</h2>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '20px' }}>
-              {prescriptions.map((prescription, index) => (
+              {Array.isArray(prescriptions) && prescriptions.map((prescription, index) => (
                 <div key={index} style={{
                   border: '1px solid #ddd',
                   borderRadius: '8px',
@@ -200,9 +372,49 @@ function EMRPage() {
                       {prescription.status}
                     </span>
                   </p>
+                  
+                  {/* Payment Button */}
+                  {prescription.status === 'active' && prescription.totalAmount > 0 && (
+                    <div style={{ marginTop: '15px', textAlign: 'center' }}>
+                      <button
+                        onClick={() => handlePaymentClick(prescription)}
+                        style={{
+                          padding: '10px 20px',
+                          backgroundColor: '#28a745',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontSize: '14px',
+                          fontWeight: '600',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          margin: '0 auto'
+                        }}
+                      >
+                        💳 Pay Invoice (${prescription.totalAmount?.toFixed(2)})
+                      </button>
+                    </div>
+                  )}
+                  
+                  {prescription.status === 'paid' && (
+                    <div style={{ marginTop: '15px', textAlign: 'center' }}>
+                      <span style={{
+                        padding: '8px 16px',
+                        backgroundColor: '#d4edda',
+                        color: '#155724',
+                        borderRadius: '6px',
+                        fontSize: '14px',
+                        fontWeight: '600'
+                      }}>
+                        ✅ Payment Completed
+                      </span>
+                    </div>
+                  )}
                 </div>
               ))}
-              {prescriptions.length === 0 && (
+              {(!Array.isArray(prescriptions) || prescriptions.length === 0) && (
                 <div style={{ 
                   textAlign: 'center', 
                   padding: '40px', 
@@ -221,7 +433,7 @@ function EMRPage() {
           <div>
             <h2 style={{ color: '#007bff', marginBottom: '20px' }}>📅 My Appointments</h2>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '20px' }}>
-              {appointments.map((appointment, index) => (
+              {Array.isArray(appointments) && appointments.map((appointment, index) => (
                 <div key={index} style={{
                   border: '1px solid #ddd',
                   borderRadius: '8px',
@@ -229,7 +441,7 @@ function EMRPage() {
                   backgroundColor: '#f8f9fa'
                 }}>
                   <h3 style={{ margin: '0 0 10px 0', color: '#333' }}>
-                    {new Date(appointment.appointmentDate).toLocaleDateString()} 
+                    {formatDate(getAppointmentDate(appointment))} 
                     {appointment.appointmentTime && ` at ${appointment.appointmentTime}`}
                   </h3>
                   <p style={{ margin: '5px 0', color: '#666' }}>
@@ -262,7 +474,7 @@ function EMRPage() {
                   )}
                 </div>
               ))}
-              {appointments.length === 0 && (
+              {(!Array.isArray(appointments) || appointments.length === 0) && (
                 <div style={{ 
                   textAlign: 'center', 
                   padding: '40px', 
@@ -276,12 +488,12 @@ function EMRPage() {
           </div>
         );
       
-      case 'medical-history':
+      case 'medical-records':
         return (
           <div>
-            <h2 style={{ color: '#007bff', marginBottom: '20px' }}>🏥 Medical History</h2>
+            <h2 style={{ color: '#007bff', marginBottom: '20px' }}>📋 Medical Records & Test Results</h2>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '20px' }}>
-              {medicalHistory.map((test, index) => (
+              {Array.isArray(medicalHistory) && medicalHistory.map((test, index) => (
                 <div key={index} style={{
                   border: '1px solid #ddd',
                   borderRadius: '8px',
@@ -321,7 +533,7 @@ function EMRPage() {
                   )}
                 </div>
               ))}
-              {medicalHistory.length === 0 && (
+              {(!Array.isArray(medicalHistory) || medicalHistory.length === 0) && (
                 <div style={{ 
                   textAlign: 'center', 
                   padding: '40px', 
@@ -335,6 +547,8 @@ function EMRPage() {
           </div>
         );
       
+      
+       
       default:
         return null;
     }
@@ -357,8 +571,9 @@ function EMRPage() {
   return (
     <div style={{ 
       minHeight: '100vh',
-      backgroundColor: 'white',
-      padding: '20px'
+      backgroundColor: '#f8f9fa',
+      padding: '20px',
+      fontFamily: 'Arial, sans-serif'
     }}>
       <div style={{
         background: 'white',
@@ -415,72 +630,207 @@ function EMRPage() {
         {/* Tab Navigation */}
         <div style={{ 
           display: 'flex', 
-          gap: '10px', 
+          gap: '5px', 
           marginBottom: '30px',
-          borderBottom: '2px solid #eee',
-          paddingBottom: '10px'
+          borderBottom: '2px solid #e9ecef',
+          paddingBottom: '0',
+          backgroundColor: '#f8f9fa',
+          borderRadius: '10px',
+          padding: '5px'
         }}>
           <button
-            onClick={() => setActiveTab('overview')}
+            onClick={() => setActiveTab('dashboard')}
             style={{
-              padding: '12px 24px',
-              backgroundColor: activeTab === 'overview' ? '#007bff' : 'white',
-              color: activeTab === 'overview' ? 'white' : '#333',
-              border: '1px solid #ddd',
-              borderRadius: '5px',
+              padding: '12px 20px',
+              backgroundColor: activeTab === 'dashboard' ? '#007bff' : 'transparent',
+              color: activeTab === 'dashboard' ? 'white' : '#6c757d',
+              border: 'none',
+              borderRadius: '8px',
               cursor: 'pointer',
-              fontSize: '14px'
+              fontSize: '14px',
+              fontWeight: activeTab === 'dashboard' ? '600' : '400',
+              transition: 'all 0.2s ease',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
             }}
           >
-            📊 Overview
+            📊 Dashboard
           </button>
           <button
-            onClick={() => setActiveTab('prescriptions')}
+            onClick={() => setActiveTab('medical-records')}
             style={{
-              padding: '12px 24px',
-              backgroundColor: activeTab === 'prescriptions' ? '#007bff' : 'white',
-              color: activeTab === 'prescriptions' ? 'white' : '#333',
-              border: '1px solid #ddd',
-              borderRadius: '5px',
+              padding: '12px 20px',
+              backgroundColor: activeTab === 'medical-records' ? '#007bff' : 'transparent',
+              color: activeTab === 'medical-records' ? 'white' : '#6c757d',
+              border: 'none',
+              borderRadius: '8px',
               cursor: 'pointer',
-              fontSize: '14px'
+              fontSize: '14px',
+              fontWeight: activeTab === 'medical-records' ? '600' : '400',
+              transition: 'all 0.2s ease',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
             }}
           >
-            💊 Prescriptions
+            📋 Medical Records
+          </button>
+          <button
+            onClick={() => setActiveTab('medications')}
+            style={{
+              padding: '12px 20px',
+              backgroundColor: activeTab === 'medications' ? '#007bff' : 'transparent',
+              color: activeTab === 'medications' ? 'white' : '#6c757d',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: activeTab === 'medications' ? '600' : '400',
+              transition: 'all 0.2s ease',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}
+          >
+            💊 Medications
           </button>
           <button
             onClick={() => setActiveTab('appointments')}
             style={{
-              padding: '12px 24px',
-              backgroundColor: activeTab === 'appointments' ? '#007bff' : 'white',
-              color: activeTab === 'appointments' ? 'white' : '#333',
-              border: '1px solid #ddd',
-              borderRadius: '5px',
+              padding: '12px 20px',
+              backgroundColor: activeTab === 'appointments' ? '#007bff' : 'transparent',
+              color: activeTab === 'appointments' ? 'white' : '#6c757d',
+              border: 'none',
+              borderRadius: '8px',
               cursor: 'pointer',
-              fontSize: '14px'
+              fontSize: '14px',
+              fontWeight: activeTab === 'appointments' ? '600' : '400',
+              transition: 'all 0.2s ease',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
             }}
           >
             📅 Appointments
-          </button>
-          <button
-            onClick={() => setActiveTab('medical-history')}
-            style={{
-              padding: '12px 24px',
-              backgroundColor: activeTab === 'medical-history' ? '#007bff' : 'white',
-              color: activeTab === 'medical-history' ? 'white' : '#333',
-              border: '1px solid #ddd',
-              borderRadius: '5px',
-              cursor: 'pointer',
-              fontSize: '14px'
-            }}
-          >
-            🏥 Medical History
           </button>
         </div>
 
         {/* Tab Content */}
         {renderTabContent()}
       </div>
+
+      {/* Payment Modal */}
+      {showPaymentModal && selectedPrescription && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            padding: '30px',
+            borderRadius: '12px',
+            width: '90%',
+            maxWidth: '500px',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.3)'
+          }}>
+            <h3 style={{ marginBottom: '20px', color: '#333', textAlign: 'center' }}>
+              💵 Confirm Order
+            </h3>
+            
+            {/* Prescription Summary */}
+            <div style={{
+              backgroundColor: '#f8f9fa',
+              padding: '20px',
+              borderRadius: '8px',
+              marginBottom: '20px',
+              border: '1px solid #e9ecef'
+            }}>
+              <h4 style={{ margin: '0 0 10px 0', color: '#333' }}>Prescription Details</h4>
+              <p style={{ margin: '5px 0', color: '#666' }}>
+                <strong>Condition:</strong> {selectedPrescription.disease}
+              </p>
+              <p style={{ margin: '5px 0', color: '#666' }}>
+                <strong>Doctor:</strong> {selectedPrescription.doctor?.name || 'N/A'}
+              </p>
+              <p style={{ margin: '5px 0', color: '#666' }}>
+                <strong>Date:</strong> {formatDate(selectedPrescription.createdAt)}
+              </p>
+              <div style={{ margin: '10px 0' }}>
+                <strong>Medicines:</strong>
+                {selectedPrescription.prescribedMedicines?.map((med, index) => (
+                  <div key={index} style={{ marginLeft: '10px', fontSize: '14px', color: '#666' }}>
+                    • {med.medicineName} - {med.quantity}x ({med.instructions})
+                  </div>
+                ))}
+              </div>
+              <p style={{ margin: '10px 0 0 0', fontSize: '18px', fontWeight: 'bold', color: '#007bff' }}>
+                Total Amount: ${selectedPrescription.totalAmount?.toFixed(2)}
+              </p>
+            </div>
+
+            {/* Payment Note */}
+            <div style={{
+              backgroundColor: '#e8f5e8',
+              border: '1px solid #c8e6c9',
+              borderRadius: '6px',
+              padding: '15px',
+              marginBottom: '20px',
+              fontSize: '14px',
+              color: '#2e7d32',
+              textAlign: 'center'
+            }}>
+              <strong>💵 Cash on Pickup</strong><br/>
+              You can pay in cash when you pick up your prescription from the pharmacy. Click "Complete Payment" to confirm your order.
+            </div>
+
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={closePaymentModal}
+                style={{
+                  padding: '12px 24px',
+                  backgroundColor: '#6c757d',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '600'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handlePaymentSubmit}
+                style={{
+                  padding: '12px 24px',
+                  backgroundColor: '#28a745',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}
+              >
+                💵 Confirm Order
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

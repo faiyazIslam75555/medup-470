@@ -105,11 +105,35 @@ export const loginDoctor = async (req, res) => {
 // GET /api/doctor/patients
 export const getDoctorPatients = async (req, res) => {
   try {
+    // Get all appointments for this doctor
     const appts = await Appointment.find({
       doctor: req.user.doctorId,
-      status: { $in: ['booked', 'treated'] },
+      status: { $in: ['booked', 'confirmed', 'completed'] },
     }).populate('user', 'name email phoneNumber');
-    res.json(appts);
+    
+    // Create a map to get unique patients
+    const uniquePatients = new Map();
+    
+    appts.forEach(appt => {
+      if (appt.user && !uniquePatients.has(appt.user._id.toString())) {
+        uniquePatients.set(appt.user._id.toString(), {
+          _id: appt.user._id,
+          user: {
+            _id: appt.user._id,
+            name: appt.user.name,
+            email: appt.user.email,
+            phoneNumber: appt.user.phoneNumber
+          },
+          status: appt.status,
+          lastAppointment: appt.date
+        });
+      }
+    });
+    
+    // Convert map to array
+    const patients = Array.from(uniquePatients.values());
+    
+    res.json(patients);
   } catch (e) {
     console.error(e);
     res.status(500).json({ message: 'Server error' });
@@ -146,14 +170,14 @@ export const searchDoctorsByName = async (req, res) => {
       });
     }
 
-    // Import TimeSlot model to get available slots
-    const TimeSlot = (await import('../models/TimeSlot.js')).default;
+    // Import UnifiedTimeSlot model to get available slots
+    const UnifiedTimeSlot = (await import('../models/UnifiedTimeSlot.js')).default;
 
     // Format doctor data with available time slots
     const formattedDoctors = await Promise.all(doctors.map(async (doctor) => {
-      // Get available time slots for this doctor from the central TimeSlot system
-      const availableSlots = await TimeSlot.find({
-        assignedTo: doctor._id,
+      // Get available time slots for this doctor from the unified system
+      const availableSlots = await UnifiedTimeSlot.find({
+        doctor: doctor._id,
         status: 'ASSIGNED'
       }).sort({ dayOfWeek: 1, timeSlot: 1 });
 
@@ -185,6 +209,7 @@ export const searchDoctorsByName = async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
+
 
 /* =================== LEAVE REQUEST FEATURES ====================== */
 

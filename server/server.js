@@ -11,7 +11,11 @@ import doctorRoutes from './routes/doctor.js';
 import staffRoutes from './routes/staff.js';
 import triageRoutes from './routes/triage.js';
 import appointmentRoutes from './routes/appointment.js';
-import timeSlotRoutes from './routes/timeSlot.js';
+import unifiedTimeSlotRoutes from './routes/unifiedTimeSlot.js';
+import vitalsRoutes from './routes/vitals.js';
+import timelineRoutes from './routes/timeline.js';
+import aiRiskRoutes from './routes/aiRisk.js';
+import emergencyAccessRoutes from './routes/emergencyAccess.js';
 
 // Suppress dotenv logs
 process.env.DOTENV_LOG_LEVEL = 'silent';
@@ -36,7 +40,11 @@ app.use('/api/doctor', doctorRoutes);
 app.use('/api/staff', staffRoutes);
 app.use('/api/triage', triageRoutes);
 app.use('/api/appointments', appointmentRoutes);
-app.use('/api/time-slots', timeSlotRoutes);
+app.use('/api/unified-time-slots', unifiedTimeSlotRoutes);
+app.use('/api/vitals', vitalsRoutes);
+app.use('/api/timeline', timelineRoutes);
+app.use('/api/ai-risk', aiRiskRoutes);
+app.use('/api/emergency', emergencyAccessRoutes);
 
 // Basic test route
 app.get('/api/health', (req, res) => {

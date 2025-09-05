@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { API_BASE_URL } from '../utils/api';
 
-function PatientEMR({ patient, onClose, onPrescriptionCreated }) {
+function PatientEMR({ patient, onClose }) {
   const [activeTab, setActiveTab] = useState('overview');
-  const [prescriptions, setPrescriptions] = useState([]);
   const [appointments, setAppointments] = useState([]);
+  const [prescriptions, setPrescriptions] = useState([]);
   const [loading, setLoading] = useState(true);
   
   // Prescription form state
@@ -29,22 +29,26 @@ function PatientEMR({ patient, onClose, onPrescriptionCreated }) {
     try {
       const token = localStorage.getItem('userToken');
       
-      // Fetch patient's prescriptions
-      const prescriptionsRes = await fetch(`${API_BASE_URL}/api/prescriptions/patient/${patient._id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (prescriptionsRes.ok) {
-        const prescriptionsData = await prescriptionsRes.json();
-        setPrescriptions(prescriptionsData.prescriptions || []);
-      }
-
       // Fetch patient's appointments
-      const appointmentsRes = await fetch(`${API_BASE_URL}/api/appointments/patient/${patient._id}`, {
+      const appointmentsRes = await fetch(`${API_BASE_URL}/api/appointments/patient/${patient.user._id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (appointmentsRes.ok) {
         const appointmentsData = await appointmentsRes.json();
         setAppointments(appointmentsData.appointments || []);
+      }
+      
+      // Fetch patient's prescriptions
+      console.log('Fetching prescriptions for patient ID:', patient.user._id);
+      const prescriptionsRes = await fetch(`${API_BASE_URL}/api/prescriptions/patient/${patient.user._id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (prescriptionsRes.ok) {
+        const prescriptionsData = await prescriptionsRes.json();
+        console.log('Prescriptions response:', prescriptionsData);
+        setPrescriptions(prescriptionsData.prescriptions || []);
+      } else {
+        console.error('Failed to fetch prescriptions:', prescriptionsRes.status, prescriptionsRes.statusText);
       }
     } catch (err) {
       console.error('Error fetching patient data:', err);
@@ -73,12 +77,27 @@ function PatientEMR({ patient, onClose, onPrescriptionCreated }) {
 
   // Add medicine to prescription
   const addMedicine = (medicine) => {
+    // Check if medicine is out of stock
+    if (medicine.quantity <= 0) {
+      alert(`⚠️ ${medicine.name} is currently out of stock and cannot be prescribed.`);
+      return;
+    }
+    
+    // Check if medicine is low stock
+    if (medicine.quantity <= medicine.reorderThreshold) {
+      const confirm = window.confirm(
+        `⚠️ ${medicine.name} is low in stock (${medicine.quantity} remaining). Do you want to proceed with prescribing it?`
+      );
+      if (!confirm) return;
+    }
+    
     const newMedicine = {
       medicineId: medicine._id,
       medicineName: medicine.name,
       quantity: 1,
       price: medicine.price,
       instructions: '',
+      frequency: 1, // Number of times per day
       total: medicine.price
     };
     
@@ -127,15 +146,17 @@ function PatientEMR({ patient, onClose, onPrescriptionCreated }) {
     
     try {
       const token = localStorage.getItem('userToken');
-      const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-      const doctorId = userData.doctorId || userData._id;
+      
+      console.log('PatientEMR - patient object:', patient);
+      console.log('PatientEMR - patient.user._id:', patient.user._id);
       
       const prescriptionPayload = {
-        patient: patient._id,
-        doctor: doctorId,
+        patient: patient.user._id,
         disease: prescriptionForm.disease,
         prescribedMedicines: prescriptionForm.medicines
       };
+      
+      console.log('PatientEMR - prescription payload:', prescriptionPayload);
 
       const res = await fetch(`${API_BASE_URL}/api/doctor/prescriptions`, {
         method: 'POST',
@@ -147,13 +168,11 @@ function PatientEMR({ patient, onClose, onPrescriptionCreated }) {
       });
 
       if (res.ok) {
-        alert('Prescription created successfully!');
+        const result = await res.json();
+        alert(`Prescription created successfully!\nInvoice #${result.invoice} has been generated automatically.`);
         setPrescriptionForm({ disease: '', medicines: [] });
         setShowPrescriptionForm(false);
         fetchPatientData(); // Refresh data
-        if (onPrescriptionCreated) {
-          onPrescriptionCreated();
-        }
       } else {
         const errorData = await res.json();
         alert(errorData.message || 'Failed to create prescription');
@@ -164,13 +183,9 @@ function PatientEMR({ patient, onClose, onPrescriptionCreated }) {
     }
   };
 
-  // Handle search input
-  const handleSearchChange = (e) => {
-    const query = e.target.value;
-    setSearchQuery(query);
-    searchMedicines(query);
-    setShowSearch(true);
-  };
+
+
+
 
   if (!patient) return null;
 
@@ -242,6 +257,7 @@ function PatientEMR({ patient, onClose, onPrescriptionCreated }) {
           >
             Overview
           </button>
+
           <button
             onClick={() => setActiveTab('prescriptions')}
             style={{
@@ -304,12 +320,13 @@ function PatientEMR({ patient, onClose, onPrescriptionCreated }) {
                 backgroundColor: '#f8f9fa'
               }}>
                 <h3 style={{ margin: '0 0 15px 0', color: '#333' }}>📊 Quick Stats</h3>
-                <p style={{ margin: '8px 0', color: '#666' }}>
-                  <strong>Total Prescriptions:</strong> {prescriptions.length}
-                </p>
-                <p style={{ margin: '8px 0', color: '#666' }}>
-                  <strong>Total Appointments:</strong> {appointments.length}
-                </p>
+
+                                 <p style={{ margin: '8px 0', color: '#666' }}>
+                   <strong>Total Prescriptions:</strong> {prescriptions.length}
+                 </p>
+                 <p style={{ margin: '8px 0', color: '#666' }}>
+                   <strong>Total Appointments:</strong> {appointments.length}
+                 </p>
                 <p style={{ margin: '8px 0', color: '#666' }}>
                   <strong>Status:</strong> {patient.status || 'Active'}
                 </p>
@@ -317,7 +334,7 @@ function PatientEMR({ patient, onClose, onPrescriptionCreated }) {
             </div>
 
             {/* Quick Actions */}
-            <div style={{ textAlign: 'center' }}>
+            <div style={{ textAlign: 'center', marginTop: '20px' }}>
               <button
                 onClick={() => setShowPrescriptionForm(true)}
                 style={{
@@ -379,8 +396,33 @@ function PatientEMR({ patient, onClose, onPrescriptionCreated }) {
                     <p style={{ margin: '5px 0', color: '#666' }}>
                       <strong>Date:</strong> {new Date(prescription.createdAt).toLocaleDateString()}
                     </p>
+                                         <p style={{ margin: '5px 0', color: '#666' }}>
+                       <strong>Medicines:</strong> {prescription.prescribedMedicines?.length || 0} items
+                     </p>
+                     {prescription.prescribedMedicines && prescription.prescribedMedicines.length > 0 && (
+                       <div style={{ margin: '5px 0' }}>
+                         <strong style={{ color: '#666' }}>Prescription Details:</strong>
+                         {prescription.prescribedMedicines.map((med, medIndex) => (
+                           <div key={medIndex} style={{ fontSize: '12px', color: '#888', marginLeft: '10px' }}>
+                             • {med.medicineName}: {med.quantity} × {med.frequency || 1} times/day
+                             {med.instructions && ` (${med.instructions})`}
+                           </div>
+                         ))}
+                       </div>
+                     )}
                     <p style={{ margin: '5px 0', color: '#666' }}>
-                      <strong>Medicines:</strong> {prescription.prescribedMedicines?.length || 0} items
+                      <strong>Total Amount:</strong> ${prescription.totalAmount || 0}
+                    </p>
+                    <p style={{ margin: '5px 0', color: '#666' }}>
+                      <strong>Status:</strong> 
+                      <span style={{ 
+                        color: prescription.status === 'active' ? '#28a745' : 
+                               prescription.status === 'completed' ? '#6c757d' : '#dc3545',
+                        fontWeight: 'bold',
+                        marginLeft: '5px'
+                      }}>
+                        {prescription.status}
+                      </span>
                     </p>
                   </div>
                 ))}
@@ -468,6 +510,17 @@ function PatientEMR({ patient, onClose, onPrescriptionCreated }) {
               overflowY: 'auto'
             }}>
               <h3 style={{ marginBottom: '20px', color: '#333' }}>Write Prescription for {patient.user?.name}</h3>
+              <div style={{
+                backgroundColor: '#e3f2fd',
+                border: '1px solid #bbdefb',
+                borderRadius: '5px',
+                padding: '10px',
+                marginBottom: '20px',
+                fontSize: '14px',
+                color: '#1976d2'
+              }}>
+                💡 <strong>Note:</strong> An invoice will be automatically generated when you create this prescription. The invoice will include all prescribed medicines with current prices and availability status.
+              </div>
               
               <form onSubmit={handlePrescriptionSubmit}>
                 {/* Disease/Diagnosis */}
@@ -500,7 +553,15 @@ function PatientEMR({ patient, onClose, onPrescriptionCreated }) {
                     <input
                       type="text"
                       value={searchQuery}
-                      onChange={handleSearchChange}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                        if (e.target.value.length >= 2) {
+                          searchMedicines(e.target.value);
+                          setShowSearch(true);
+                        } else {
+                          setShowSearch(false);
+                        }
+                      }}
                       placeholder="Type medicine name (e.g., para, ibu)"
                       style={{
                         width: '100%',
@@ -539,7 +600,12 @@ function PatientEMR({ patient, onClose, onPrescriptionCreated }) {
                           >
                             <strong>{medicine.name}</strong>
                             <br />
-                            <small>Price: ${medicine.price} | Stock: {medicine.quantity}</small>
+                            <small>
+                              Price: ${medicine.price} | Stock: {medicine.quantity}
+                              {medicine.quantity <= medicine.reorderThreshold && (
+                                <span style={{ color: '#dc3545', fontWeight: 'bold' }}> (Low Stock!)</span>
+                              )}
+                            </small>
                           </div>
                         ))}
                       </div>
@@ -577,42 +643,62 @@ function PatientEMR({ patient, onClose, onPrescriptionCreated }) {
                           </button>
                         </div>
                         
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                          <div>
-                            <label style={{ fontSize: '14px', color: '#666' }}>Quantity:</label>
-                            <input
-                              type="number"
-                              min="1"
-                              value={medicine.quantity}
-                              onChange={(e) => updateMedicine(index, 'quantity', parseInt(e.target.value))}
-                              style={{
-                                width: '100%',
-                                padding: '8px',
-                                border: '1px solid #ddd',
-                                borderRadius: '3px'
-                              }}
-                            />
-                          </div>
-                          <div>
-                            <label style={{ fontSize: '14px', color: '#666' }}>Instructions:</label>
-                            <input
-                              type="text"
-                              value={medicine.instructions}
-                              onChange={(e) => updateMedicine(index, 'instructions', e.target.value)}
-                              placeholder="e.g., Take twice daily"
-                              style={{
-                                width: '100%',
-                                padding: '8px',
-                                border: '1px solid #ddd',
-                                borderRadius: '3px'
-                              }}
-                            />
-                          </div>
-                        </div>
+                                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                           <div>
+                             <label style={{ fontSize: '14px', color: '#666' }}>Quantity:</label>
+                             <input
+                               type="number"
+                               min="1"
+                               value={medicine.quantity}
+                               onChange={(e) => updateMedicine(index, 'quantity', parseInt(e.target.value))}
+                               style={{
+                                 width: '100%',
+                                 padding: '8px',
+                                 border: '1px solid #ddd',
+                                 borderRadius: '3px'
+                               }}
+                             />
+                           </div>
+                           <div>
+                             <label style={{ fontSize: '14px', color: '#666' }}>Times per Day:</label>
+                             <input
+                               type="number"
+                               min="1"
+                               max="6"
+                               value={medicine.frequency || 1}
+                               onChange={(e) => updateMedicine(index, 'frequency', parseInt(e.target.value))}
+                               style={{
+                                 width: '100%',
+                                 padding: '8px',
+                                 border: '1px solid #ddd',
+                                 borderRadius: '3px'
+                               }}
+                             />
+                           </div>
+                           <div>
+                             <label style={{ fontSize: '14px', color: '#666' }}>Instructions:</label>
+                             <input
+                               type="text"
+                               value={medicine.instructions}
+                               onChange={(e) => updateMedicine(index, 'instructions', e.target.value)}
+                               placeholder="e.g., After meals"
+                               style={{
+                                 width: '100%',
+                                 padding: '8px',
+                                 border: '1px solid #ddd',
+                                 borderRadius: '3px'
+                               }}
+                             />
+                           </div>
+                         </div>
                         
-                        <div style={{ marginTop: '10px', fontSize: '14px', color: '#666' }}>
-                          Price: ${medicine.price} × {medicine.quantity} = ${medicine.total}
-                        </div>
+                                                 <div style={{ marginTop: '10px', fontSize: '14px', color: '#666' }}>
+                           <div>Price: ${medicine.price} × {medicine.quantity} = ${medicine.total}</div>
+                           <div style={{ marginTop: '5px', fontWeight: 'bold', color: '#007bff' }}>
+                             Take {medicine.frequency || 1} time{(medicine.frequency || 1) > 1 ? 's' : ''} per day
+                             {medicine.instructions && ` - ${medicine.instructions}`}
+                           </div>
+                         </div>
                       </div>
                     ))}
                   </div>
@@ -652,6 +738,7 @@ function PatientEMR({ patient, onClose, onPrescriptionCreated }) {
             </div>
           </div>
         )}
+
       </div>
     </div>
   );

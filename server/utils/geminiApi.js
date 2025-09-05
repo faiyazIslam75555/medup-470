@@ -6,6 +6,7 @@ async function callGemini(prompt) {
   
   if (!apiKey) {
     console.error('GEMINI_API_KEY not found in environment variables');
+    console.error('Please create a .env file in the server directory with GEMINI_API_KEY=your_api_key');
     return null;
   }
 

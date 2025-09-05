@@ -37,7 +37,21 @@ const doctorSchema = new mongoose.Schema(
         type: Date,
         default: Date.now
       }
-    }]
+    }],
+    // Emergency access permissions
+    hasEmergencyAccess: {
+      type: Boolean,
+      default: false
+    },
+    emergencyAccessGrantedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Admin',
+      default: null
+    },
+    emergencyAccessGrantedAt: {
+      type: Date,
+      default: null
+    }
   },
   { timestamps: true }
 );

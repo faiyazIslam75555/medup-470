@@ -2,7 +2,7 @@
 // Complete appointment booking system
 
 import Appointment from '../models/Appointment.js';
-import TimeSlot from '../models/TimeSlot.js';
+import UnifiedTimeSlot from '../models/UnifiedTimeSlot.js';
 import User from '../models/User.js';
 import Doctor from '../models/Doctor.js';
 
@@ -11,62 +11,51 @@ import Doctor from '../models/Doctor.js';
 // POST /api/appointments - Create new appointment
 export const createAppointment = async (req, res) => {
   try {
-    const { doctorId, date, dayOfWeek, timeSlot, reason, urgency } = req.body;
+    const { scheduleId, date, reason, urgency } = req.body;
     const userId = req.user._id;
 
     // Validate required fields
-    if (!doctorId || !date || dayOfWeek === undefined || !timeSlot || !reason) {
+    if (!scheduleId || !date || !reason) {
       return res.status(400).json({ 
-        message: 'Missing required fields: doctorId, date, dayOfWeek, timeSlot, reason' 
+        message: 'Missing required fields: scheduleId, date, reason' 
       });
     }
 
-    // Validate dayOfWeek (0-6)
-    if (dayOfWeek < 0 || dayOfWeek > 6) {
-      return res.status(400).json({ message: 'Invalid day of week (0-6)' });
+    // Note: timeSlot validation is handled by the DoctorSchedule model
+
+    // Find the doctor schedule
+    const doctorSchedule = await DoctorSchedule.findById(scheduleId);
+    if (!doctorSchedule) {
+      return res.status(404).json({ message: 'Doctor schedule not found' });
     }
 
-    // Validate timeSlot
-    if (!['8-12', '12-4', '4-8', '20-00'].includes(timeSlot)) {
-      return res.status(400).json({ message: 'Invalid time slot' });
+    // Check if the schedule is active
+    if (doctorSchedule.status !== 'active') {
+      return res.status(400).json({ message: 'This schedule is not active' });
     }
 
-    // Check if doctor exists
-    const doctor = await Doctor.findById(doctorId);
-    if (!doctor) {
-      return res.status(404).json({ message: 'Doctor not found' });
-    }
-
-    // Check if doctor has approved time slot for this day and time slot (using central TimeSlot system)
-    const timeSlotDoc = await TimeSlot.findOne({
-      dayOfWeek: dayOfWeek,
-      timeSlot: timeSlot,
-      assignedTo: doctorId,
-      status: 'ASSIGNED',
-      hasAppointment: false
-    });
-
-    if (!timeSlotDoc) {
-      return res.status(400).json({ 
-        message: 'Doctor is not available on this day and time slot' 
-      });
-    }
-
-    // Check if appointment date matches the day of week
     const appointmentDate = new Date(date);
-    const appointmentDayOfWeek = appointmentDate.getDay();
     
-    if (appointmentDayOfWeek !== dayOfWeek) {
+    // Check if the date is available in the schedule
+    if (!doctorSchedule.isDateAvailable(appointmentDate)) {
       return res.status(400).json({ 
-        message: 'Appointment date does not match the selected day of week' 
+        message: 'This date is not available for booking' 
       });
     }
 
-    // Check if slot is already booked for this specific date
+    // Check if appointment date matches the schedule's day of week
+    const appointmentDayOfWeek = appointmentDate.getDay();
+    if (appointmentDayOfWeek !== doctorSchedule.dayOfWeek) {
+      return res.status(400).json({ 
+        message: 'Appointment date does not match the schedule day of week' 
+      });
+    }
+
+    // Check if there's already an appointment for this date and time
     const existingAppointment = await Appointment.findOne({
-      doctor: doctorId,
+      doctor: doctorSchedule.doctor,
       date: appointmentDate,
-      timeSlot: timeSlot,
+      timeSlot: doctorSchedule.timeSlot,
       status: { $in: ['booked', 'confirmed'] }
     });
 
@@ -79,20 +68,18 @@ export const createAppointment = async (req, res) => {
     // Create appointment
     const appointment = new Appointment({
       user: userId,
-      doctor: doctorId,
+      doctor: doctorSchedule.doctor,
       date: appointmentDate,
-      dayOfWeek: dayOfWeek,
-      timeSlot: timeSlot,
+      dayOfWeek: doctorSchedule.dayOfWeek,
+      timeSlot: doctorSchedule.timeSlot,
       reason: reason.trim(),
       urgency: urgency || 'normal'
     });
 
     await appointment.save();
 
-    // Update the time slot to mark it as booked
-    timeSlotDoc.hasAppointment = true;
-    timeSlotDoc.appointmentId = appointment._id;
-    await timeSlotDoc.save();
+    // Mark the date as unavailable in the doctor's schedule
+    await doctorSchedule.markDateUnavailable(appointmentDate, 'booked', appointment._id);
 
     // Populate doctor and user info for response
     const populatedAppointment = await Appointment.findById(appointment._id)
@@ -166,7 +153,6 @@ export const getDoctorAppointments = async (req, res) => {
 
     const appointments = await Appointment.find({ doctor: doctor._id })
       .populate('user', 'name email phoneNumber')
-      .populate('doctor', 'specialty')
       .sort({ date: 1, timeSlot: 1 });
 
     res.json({
@@ -277,9 +263,56 @@ export const cancelAppointment = async (req, res) => {
     appointment.status = 'cancelled';
     await appointment.save();
 
+    // Release the date in the doctor's schedule
+    const doctorSchedule = await DoctorSchedule.findOne({
+      doctor: appointment.doctor,
+      dayOfWeek: appointment.dayOfWeek,
+      timeSlot: appointment.timeSlot
+    });
+
+    if (doctorSchedule) {
+      await doctorSchedule.markDateAvailable(appointment.date);
+    }
+
     res.json({ message: 'Appointment cancelled successfully' });
   } catch (error) {
     console.error('Cancel appointment error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// PUT /api/appointments/:id/complete - Mark appointment as completed (for doctors)
+export const completeAppointment = async (req, res) => {
+  try {
+    const appointment = await Appointment.findById(req.params.id);
+    if (!appointment) {
+      return res.status(404).json({ message: 'Appointment not found' });
+    }
+
+    // Check if user is the doctor for this appointment
+    const doctor = await Doctor.findOne({ user: req.user._id });
+    if (!doctor || doctor._id.toString() !== appointment.doctor.toString()) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    // Update appointment status
+    appointment.status = 'completed';
+    await appointment.save();
+
+    // Release the date in the doctor's schedule
+    const doctorSchedule = await DoctorSchedule.findOne({
+      doctor: appointment.doctor,
+      dayOfWeek: appointment.dayOfWeek,
+      timeSlot: appointment.timeSlot
+    });
+
+    if (doctorSchedule) {
+      await doctorSchedule.markDateAvailable(appointment.date);
+    }
+
+    res.json({ message: 'Appointment marked as completed successfully' });
+  } catch (error) {
+    console.error('Complete appointment error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
@@ -293,5 +326,6 @@ export default {
   getDoctorAppointments,
   getAppointmentById,
   updateAppointment,
-  cancelAppointment
+  cancelAppointment,
+  completeAppointment
 };
